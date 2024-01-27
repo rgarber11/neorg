@@ -105,7 +105,15 @@ module.public = {
             )
             return
         end
-
+        local content = {}
+        if converter_config.inline_fix then
+            content = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+            local lines_of_text = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+            for i, line in pairs(lines_of_text) do
+                lines_of_text[i] = string.gsub(line, "%$([^ |].-)%$", "%$|%1|%$")
+            end
+            vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines_of_text)
+        end
         local document_root = module.required["core.integrations.treesitter"].get_document_root(buffer)
 
         if not document_root then
@@ -208,6 +216,10 @@ module.public = {
         end
 
         local output = descend(document_root)
+
+        if converter_config.inline_fix then
+            vim.api.nvim_buf_set_lines(buffer, 0, -1, false, content)
+        end
 
         -- Every converter can also come with a `cleanup` function that performs some final tweaks to the output string
         return converter.export.cleanup and converter.export.cleanup(output) or output, converter_config.extension
