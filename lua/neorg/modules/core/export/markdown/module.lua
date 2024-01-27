@@ -200,6 +200,7 @@ module.config.public = {
     -- when creating markdown files.
     -- The default is recommended, although you can change it.
     extension = "md",
+    inline_fix = true,
 }
 
 module.public = {
