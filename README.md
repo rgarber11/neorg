@@ -76,7 +76,7 @@ To learn more about the philosophy of the project check the [philosophy](#-philo
 For neovim beginners who don't want to tinker with the configurations:
 
 1. Install one of the Nerd fonts, for example Meslo Nerd Font from  [Nerd Fonts](https://www.nerdfonts.com/font-downloads).
-2. Set your terminal font to the installed Nerd Font.
+2. Set your terminal font to the monospace variant of the installed font, for example "MesloLGM Nerd Font Mono".
 3. Make sure you have git by running `git --version`
 4. Paste the sample init.lua below to `~/.config/nvim/init.lua`
 5. Start taking notes by `nvim test.norg`
@@ -252,6 +252,7 @@ You can install it through your favorite plugin manager:
     {
       "nvim-neorg/neorg",
       build = ":Neorg sync-parsers",
+      lazy = false, -- specify lazy = false because some lazy.nvim distributions set lazy = true by default
       -- tag = "*",
       dependencies = { "nvim-lua/plenary.nvim" },
       config = function()
@@ -271,6 +272,34 @@ You can install it through your favorite plugin manager:
       end,
     },
   })
+  ```
+
+  If you want to lazy load the plugin and split it into a separate file, here is the snippet. (be careful, you'll not get command completion the first time)
+  ```lua
+  return {
+    "nvim-neorg/neorg",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    build = ":Neorg sync-parsers",
+    -- tag = "*",
+    lazy = true, -- enable lazy load
+    ft = "norg", -- lazy load on file type
+    cmd = "Neorg", -- lazy load on command
+    config = function()
+      require("neorg").setup {
+        load = {
+          ["core.defaults"] = {}, -- Loads default behaviour
+          ["core.concealer"] = {}, -- Adds pretty icons to your documents
+          ["core.dirman"] = { -- Manages Neorg workspaces
+            config = {
+              workspaces = {
+                notes = "~/notes",
+              },
+            },
+          },
+        },
+      }
+    end,
+  }
   ```
 
   </details>
@@ -493,6 +522,6 @@ Immense thank you to all of the sponsors of my work!
 
 <div align="center">
 
-<!-- sponsors --><a href="https://github.com/vsedov"><img src="https://github.com/vsedov.png" width="60px" alt="vsedov" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/bR3iN"><img src="https://github.com/bR3iN.png" width="60px" alt="bR3iN" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/skbolton"><img src="https://github.com/skbolton.png" width="60px" alt="skbolton" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/dimas-cyriaco"><img src="https://github.com/dimas-cyriaco.png" width="60px" alt="dimas-cyriaco" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/molleweide"><img src="https://github.com/molleweide.png" width="60px" alt="molleweide" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/theherk"><img src="https://github.com/theherk.png" width="60px" alt="theherk" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/purepani"><img src="https://github.com/purepani.png" width="60px" alt="purepani" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/refaelsh"><img src="https://github.com/refaelsh.png" width="60px" alt="refaelsh" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/tromars"><img src="https://github.com/tromars.png" width="60px" alt="tromars" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/rbereziuk"><img src="https://github.com/rbereziuk.png" width="60px" alt="rbereziuk" /></a>&nbsp;&nbsp;&nbsp;<!-- sponsors -->
+<!-- sponsors --><a href="https://github.com/vsedov"><img src="https://github.com/vsedov.png" width="60px" alt="vsedov" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/bR3iN"><img src="https://github.com/bR3iN.png" width="60px" alt="bR3iN" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/skbolton"><img src="https://github.com/skbolton.png" width="60px" alt="skbolton" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/dimas-cyriaco"><img src="https://github.com/dimas-cyriaco.png" width="60px" alt="dimas-cyriaco" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/molleweide"><img src="https://github.com/molleweide.png" width="60px" alt="molleweide" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/theherk"><img src="https://github.com/theherk.png" width="60px" alt="theherk" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/purepani"><img src="https://github.com/purepani.png" width="60px" alt="purepani" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/refaelsh"><img src="https://github.com/refaelsh.png" width="60px" alt="refaelsh" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/tromars"><img src="https://github.com/tromars.png" width="60px" alt="tromars" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/rbereziuk"><img src="https://github.com/rbereziuk.png" width="60px" alt="rbereziuk" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/zettlrobert"><img src="https://github.com/zettlrobert.png" width="60px" alt="zettlrobert" /></a>&nbsp;&nbsp;&nbsp;<!-- sponsors -->
 
 </div>
