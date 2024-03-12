@@ -37,7 +37,7 @@ module.load = function()
 
                 while node:parent() do
                     if module.private.callbacks[node:type()] then
-                        local register = vim.fn.getreg(vim.v.register)
+                        local register = vim.fn.getreg(assert(vim.v.register))
 
                         vim.fn.setreg(
                             vim.v.register,
@@ -48,17 +48,13 @@ module.load = function()
 
                                 return callback.cb(
                                     node,
-                                    vim.split(
-                                        register,
-                                        "\n",
-                                        { ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
-                                            plain = true,
-                                            -- TODO: This causes problems in places
-                                            -- where you actually want to copy
-                                            -- newlines.
-                                            trimempty = true,
-                                        }
-                                    ),
+                                    vim.split(assert(register --[[@as string]]), "\n", {
+                                        plain = true,
+                                        -- TODO: This causes problems in places
+                                        -- where you actually want to copy
+                                        -- newlines.
+                                        trimempty = true,
+                                    }),
                                     {
                                         start = range[1],
                                         ["end"] = range[2],
@@ -66,7 +62,7 @@ module.load = function()
                                     }
                                 )
                             end) or register,
-                            "l" ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                            "l" ---@diagnostic disable-line
                         )
 
                         return
