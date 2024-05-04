@@ -479,13 +479,11 @@ module.public = {
 
                 for _, extmark in ipairs(icon_extmarks) do
                     local extmark_details = extmark[4]
-                    local extmark_column = extmark[3] + (line_length - vim.api.nvim_strwidth(line))
 
                     for _, virt_text in ipairs(extmark_details.virt_text or {}) do
-                        line = line:sub(1, extmark_column)
+                        line = vim.fn.strcharpart(line, 0, extmark[3])
                             .. virt_text[1]
-                            .. line:sub(extmark_column + vim.api.nvim_strwidth(virt_text[1]) + 1)
-                        line_length = vim.api.nvim_strwidth(line) - line_length + vim.api.nvim_strwidth(virt_text[1])
+                            .. vim.fn.strcharpart(line, extmark[3] + vim.api.nvim_strwidth(virt_text[1]))
                     end
                 end
 
@@ -653,6 +651,7 @@ module.public = {
                 local len = line_lengths[row_0b - row_start_0b + 1]
                 local mark_col_start_0b = math.max(0, col_start_0b - config.padding.left)
                 local mark_col_end_0bex = max_len + config.padding.right
+                local priority = 101
                 if len >= mark_col_start_0b then
                     vim.api.nvim_buf_set_extmark(bufid, module.private.ns_icon, row_0b, mark_col_start_0b, {
                         end_row = row_0b + 1,
@@ -663,6 +662,7 @@ module.public = {
                         virt_text_pos = "overlay",
                         virt_text_win_col = len,
                         spell = config.spell_check,
+                        priority = priority,
                     })
                 else
                     vim.api.nvim_buf_set_extmark(bufid, module.private.ns_icon, row_0b, len, {
@@ -677,6 +677,7 @@ module.public = {
                         virt_text_pos = "overlay",
                         virt_text_win_col = len,
                         spell = config.spell_check,
+                        priority = priority,
                     })
                 end
             end

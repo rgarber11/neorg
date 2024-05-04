@@ -43,6 +43,16 @@ local function get_timestamp()
     end
 end
 
+local function get_author()
+    local author_config = module.config.public.author
+
+    if author_config == nil or author_config == "" then
+        return utils.get_username()
+    else
+        return author_config
+    end
+end
+
 -- The default template found in the config for this module.
 local default_template = {
     -- The title field generates a title for the file based on the filename.
@@ -56,12 +66,10 @@ local default_template = {
     -- The description field is always kept empty for the user to fill in.
     { "description", "" },
 
-    -- The authors field is autopopulated by querying the current user's system username.
+    -- The authors field is taken from config or autopopulated by querying the current user's system username.
     {
         "authors",
-        function()
-            return utils.get_username()
-        end,
+        get_author,
     },
 
     -- The categories field is always kept empty for the user to fill in.
@@ -139,15 +147,39 @@ module.config.public = {
     -- Custom template to use for generating content inside `@document.meta` tag
     template = default_template,
 
+    -- Custom author name that overrides default value if not nil or empty
+    -- Default value is autopopulated by querying the current user's system username.
+    author = "",
+
     -- Timezone information in the timestamps
     -- - "utc" the timestamp is in UTC+0
     -- - "local" the timestamp is in the local timezone
     -- - "implicit-local" like "local", but the timezone information is omitted from the timestamp
     timezone = "local",
 
-    -- Whether or not to call :h :undojoin just before changing the timestamp in `update_metadata`
-    -- This will make your undo key undo the last change before writing the file in addition to the
-    -- timestamp change. This will move your cursor to the top of the file.
+    -- Whether or not to call `:h :undojoin` just before changing the timestamp in
+    -- `update_metadata`. This will make your undo key undo the last change before writing the file
+    -- in addition to the timestamp change. This will move your cursor to the top of the file. For
+    -- users with an autosave plugin, this option must be paired with keybinds for undo/redo to
+    -- avoid problems with undo tree branching:
+    -- ```lua
+    -- ["core.keybinds"] = {
+    --   config = {
+    --     hook = function(keybinds)
+    --       keybinds.map("norg", "n", "u", function()
+    --         require("neorg.modules.core.esupports.metagen.module").public.skip_next_update()
+    --         local k = vim.api.nvim_replace_termcodes("u<c-o>", true, false, true)
+    --         vim.api.nvim_feedkeys(k, 'n', false)
+    --       end)
+    --       keybinds.map("norg", "n", "<c-r>", function()
+    --         require("neorg.modules.core.esupports.metagen.module").public.skip_next_update()
+    --         local k = vim.api.nvim_replace_termcodes("<c-r><c-o>", true, false, true)
+    --         vim.api.nvim_feedkeys(k, 'n', false)
+    --       end)
+    --     end,
+    --   },
+    -- },
+    -- ```
     undojoin_updates = false,
 }
 

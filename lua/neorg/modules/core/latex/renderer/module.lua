@@ -1,7 +1,7 @@
 --[[
     file: Core-Latex-Renderer
     title: Rendering LaTeX with image.nvim
-    summary: An experimental module for inline rendering latex images
+    summary: An experimental module for inline rendering latex images.
     ---
 
 This is an experimental module that requires nvim 0.10+. It renders LaTeX snippets as images
@@ -60,6 +60,7 @@ module.load = function()
     end)
 end
 
+---@class core.latex.renderer
 module.public = {
     latex_renderer = function()
         module.private.ranges = {}
@@ -197,7 +198,7 @@ module.config.public = {
     -- Module that renders the images. This is currently the only option
     renderer = "core.integrations.image",
 
-    -- make the images larger or smaller by adjusting the scale
+    -- Make the images larger or smaller by adjusting the scale
     scale = 1,
 }
 

@@ -1,5 +1,4 @@
 local neorg = require("neorg.core")
-local lib, modules, utils, log = neorg.lib, neorg.modules, neorg.utils, neorg.log
 
 local docgen = {}
 
@@ -31,6 +30,8 @@ require("neorg").setup({
         },
     },
 })
+
+local lib, modules, utils, log = neorg.lib, neorg.modules, neorg.utils, neorg.log
 
 -- Start neorg
 neorg.org_file_entered(false)
@@ -314,21 +315,32 @@ docgen.generators = {
             "",
             "</div>",
             "",
+            "# Kickstart",
+            "",
+            "If you would like a Neovim setup that has Neorg configured out of the box look no further than the [kickstart guide](https://github.com/nvim-neorg/neorg/wiki/Kickstart)!",
+            "",
             "# Using Neorg",
             "",
             "Neorg depends on a number of other technologies, all of which have to be correctly configured to keep Neorg running smoothly.",
-            "For some help on understanding how your terminal, Neovim, coloschemes, tree-sitter and more come together to produce your Neorg experience (or Neorg problems), see [this document on understanding Neorg dependencies](Dependencies).",
+            "For some help on understanding how your terminal, Neovim, colourschemes, tree-sitter and more come together to produce your Neorg experience (or Neorg problems), see [this document on understanding Neorg dependencies](Dependencies).",
             "",
             "At first configuring Neorg might be rather scary. I have to define what modules I want to use in the `require('neorg').setup()` function?",
             "I don't even know what the default available values are!",
-            "Don't worry, an installation guide is present [here](https://github.com/nvim-neorg/neorg#-installationquickstart), so go ahead and read it!",
+            "Don't worry, there are guides you are free to check out. The [tutorial](https://github.com/nvim-neorg/neorg/wiki/Tutorial) guides you through what Neorg is and its basics.",
+            "Afterwards, feel free to check out the [configuration guide](https://github.com/nvim-neorg/neorg/wiki/Setup-Guide) as well as the [cookbook](https://github.com/nvim-neorg/neorg/wiki/Cookbook).",
+            "",
+            "# Broken Installation",
+            "",
+            "Having issues when installing Neorg, specifically past the `8.0.0` version? Check out the [following page](https://github.com/pysan3/Norg-Tutorial/blob/main/MIGRATION-v8.md) where you can troubleshoot your issue from start to finish.",
             "",
             "# Contributing to Neorg",
             "",
             "Neorg is a very big and powerful tool behind the scenes - way bigger than it may initially seem.",
             "Modules are its core foundation, and building modules is like building lego bricks to form a massive structure.",
             "There's an in-the-works tutorial dedicated to making modules [right here](https://github.com/andreadev-it/neorg-module-tutorials/blob/main/introduction.md)!",
+            "",
             "# Module naming convention",
+            "",
             "Neorg provides default modules, and users can extend Neorg by creating community modules.",
             "We agreed on a module naming convention, and it should be used as is.",
             "This convention should help users know at a glance what function the module serves in the grand scheme of things.",

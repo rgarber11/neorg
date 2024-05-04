@@ -217,28 +217,22 @@ local timezone_list = {
 
 ---@alias Date {weekday: {name: string, number: number}?, day: number?, month: {name: string, number: number}?, year: number?, timezone: string?, time: {hour: number, minute: number, second: number?}?}
 
+---@class core.tempus
 module.public = {
     --- Converts a parsed date with `parse_date` to a lua date.
     ---@param parsed_date Date #The date to convert
     ---@return osdate #A Lua date
     to_lua_date = function(parsed_date)
-        return os.date( ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
-            "*t",
-            os.time(
-                vim.tbl_deep_extend(
-                    "force",
-                    os.date("*t"),
-                    { ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
-                        day = parsed_date.day,
-                        month = parsed_date.month and parsed_date.month.number or nil,
-                        year = parsed_date.year,
-                        hour = parsed_date.time and parsed_date.time.hour,
-                        min = parsed_date.time and parsed_date.time.minute,
-                        sec = parsed_date.time and parsed_date.time.second,
-                    }
-                )
-            )
-        )
+        local now = os.date("*t") --[[@as osdate]]
+        local parsed = os.time(vim.tbl_deep_extend("force", now, {
+            day = parsed_date.day,
+            month = parsed_date.month and parsed_date.month.number or nil,
+            year = parsed_date.year,
+            hour = parsed_date.time and parsed_date.time.hour,
+            min = parsed_date.time and parsed_date.time.minute,
+            sec = parsed_date.time and parsed_date.time.second,
+        }) --[[@as osdateparam]])
+        return os.date("*t", parsed) --[[@as osdate]]
     end,
 
     --- Converts a lua `osdate` to a Neorg date.

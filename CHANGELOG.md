@@ -1,5 +1,204 @@
 # Changelog
 
+## [8.4.1](https://github.com/nvim-neorg/neorg/compare/v8.4.0...v8.4.1) (2024-04-13)
+
+
+### Bug Fixes
+
+* **checkhealth:** add missing parameter to string.format ([#1386](https://github.com/nvim-neorg/neorg/issues/1386)) ([9656757](https://github.com/nvim-neorg/neorg/commit/9656757f7085e9e36d2469b8876f6b27f8e87c7b))
+* lack of comma ([65c7550](https://github.com/nvim-neorg/neorg/commit/65c75508626ad02a3cb40a84c4c3df0cde7b0e5a))
+* properly check for existence of a given module by trying to load it instead of passively scanning the loaded module list ([727ef2a](https://github.com/nvim-neorg/neorg/commit/727ef2ab4247b52733d1a84d87143257e783d4e9))
+
+## [8.4.0](https://github.com/nvim-neorg/neorg/compare/v8.3.0...v8.4.0) (2024-04-04)
+
+
+### Features
+
+* add `integrations.otter` for LSP-like behaviours in code blocks ([#1329](https://github.com/nvim-neorg/neorg/issues/1329)) ([ccb7555](https://github.com/nvim-neorg/neorg/commit/ccb75557f8582e044c687452b8b249151f6e7098))
+
+
+### Bug Fixes
+
+* broken wiki ([68ea6b5](https://github.com/nvim-neorg/neorg/commit/68ea6b53b6cb58c54ac51256cdfd76eec540806c))
+* don't load `core.todo-introspector` if not on nightly (oops) ([bc7830e](https://github.com/nvim-neorg/neorg/commit/bc7830ec3e538d381f5361ca80a9bc5f97fc8fa9))
+
+## [8.3.0](https://github.com/nvim-neorg/neorg/compare/v8.2.1...v8.3.0) (2024-04-04)
+
+
+### Features
+
+* basic checkhealth for configuration checking ([645cd0c](https://github.com/nvim-neorg/neorg/commit/645cd0c257b2fccc655a32d0b04aa706c96fb1a8))
+* check for the existence of `vhyrro/luarocks.nvim` ([a5aa931](https://github.com/nvim-neorg/neorg/commit/a5aa93108999de75c8d075a0ee4dcc6a715a9e1a))
+* **dirman:** use pathlib for all dirman operations  ([#1354](https://github.com/nvim-neorg/neorg/issues/1354)) ([1190dc7](https://github.com/nvim-neorg/neorg/commit/1190dc78b9785ad75301de9153ed8de83c179b66))
+* implement the basics of the new todo introspector ([a7ad515](https://github.com/nvim-neorg/neorg/commit/a7ad51519f2e7a7274c069e35d4396a0a5f88ddc))
+* **todo-introspector:** correctly enumerate amounts of done/undone items ([d284488](https://github.com/nvim-neorg/neorg/commit/d2844882ec0d18d59a7b8727b893a964fe76a754))
+* **todo-introspector:** display all TODOs on file entry ([80b2d33](https://github.com/nvim-neorg/neorg/commit/80b2d33b1f402b0279009442caf6cfaa9cd308f4))
+* **todo-introspector:** finalize display code ([949ae96](https://github.com/nvim-neorg/neorg/commit/949ae962558d43673130159cd6bce89e4bf4febc))
+* **todo-introspector:** properly handle nodes broken into two ([76e6443](https://github.com/nvim-neorg/neorg/commit/76e6443c9823470897245951f37cef0cc5b966f0))
+
+
+### Bug Fixes
+
+* add `core.todo-introspector` to the list of default modules ([5202271](https://github.com/nvim-neorg/neorg/commit/52022710d47fd66c73280f7a8d7fe2013d899224))
+* **checkhealth:** fix erroneous boolean check for lazy users ([d523688](https://github.com/nvim-neorg/neorg/commit/d523688ecc6ddf5fbac9b42e0b62515c7655bed3))
+* **dirman:** norg link with `.` was misinterpreted as the extension ([96fe2c9](https://github.com/nvim-neorg/neorg/commit/96fe2c92d0e8fb2a2a853847909155aae4d5ca46))
+* **dirman:** respect force option in dirman create_file ([0782ca4](https://github.com/nvim-neorg/neorg/commit/0782ca4a221cfd965f05752d7178b2692bb64ae0))
+* **introspector:** various bugs related to extmark updates ([e8c9193](https://github.com/nvim-neorg/neorg/commit/e8c9193b10ea946e6f90e06daf0efeafb55fa970))
+* issue a warning to users when dependencies cannot be found (instead of silently failing) ([04f4127](https://github.com/nvim-neorg/neorg/commit/04f4127a08a59d110c882464b11294dec0cf1258))
+* **luarocks:** pin `pathlib` to `2.0` (as luarocks doesn't like it otherwise) ([5b93840](https://github.com/nvim-neorg/neorg/commit/5b93840d97c2ac0d1534321ca3659f4b8c1342e4))
+* **pathlib:** bump pathlib version; fix `path:touch` ([bedbbe2](https://github.com/nvim-neorg/neorg/commit/bedbbe208e61491d1d8be0b6775793b246b444d0))
+* **todo-introspector:** correctly handle deletion of lines ([a8b7ad0](https://github.com/nvim-neorg/neorg/commit/a8b7ad08f6e8cd36c83e371ab9a74cc1e5252a0b))
+* **todo-introspector:** do not error when a line out of bounds is deleted ([62c7925](https://github.com/nvim-neorg/neorg/commit/62c7925e17ab25cc40c50cd266701a36aa854a50))
+* **todo-introspector:** properly clear namespace for refreshed buffers ([5f67407](https://github.com/nvim-neorg/neorg/commit/5f6740795303a03b58c81bf6396ae03d487d5b7c))
+
+
+### Reverts
+
+* backout of commit 5b93840d97c2ac0d1534321ca3659f4b8c1342e4 ([e0690fa](https://github.com/nvim-neorg/neorg/commit/e0690fa65546bd91f9aa4883f1ce4cbea45e1898))
+
+## [8.2.1](https://github.com/nvim-neorg/neorg/compare/v8.2.0...v8.2.1) (2024-03-28)
+
+
+### Bug Fixes
+
+* **core.neorgcmd.list:** don't accidentally open a separate file when displaying loaded modules ([eef1705](https://github.com/nvim-neorg/neorg/commit/eef1705ee78ae6e66917901da507a666743de877))
+* don't allow TODOs with nested items of the same type to be given the pending status ([5942fdf](https://github.com/nvim-neorg/neorg/commit/5942fdf7eb42b6364ca0a754ac88bd0ca05ae660))
+* load default modules even if an empty table is provided as input to setup() ([c1d36ad](https://github.com/nvim-neorg/neorg/commit/c1d36add07364e024dbf39276388741e54f7e955))
+* **neorgcmd.modules.list:** add basic escape keybinds ([71e2f05](https://github.com/nvim-neorg/neorg/commit/71e2f05ee19c94705fadbc1f84e11990baf8ff1c))
+* **typecheck:** use type definitions from nvim runtime instead ([#1358](https://github.com/nvim-neorg/neorg/issues/1358)) ([e7f393f](https://github.com/nvim-neorg/neorg/commit/e7f393f9e4a17c32289875e273f687863336894c))
+
+## [8.2.0](https://github.com/nvim-neorg/neorg/compare/v8.1.0...v8.2.0) (2024-03-25)
+
+
+### Features
+
+* **metagen:** add author field to provide persistent custom author name ([#1331](https://github.com/nvim-neorg/neorg/issues/1331)) ([e576308](https://github.com/nvim-neorg/neorg/commit/e576308243b58838ed97309bec60bf180cde3c91))
+
+
+### Bug Fixes
+
+* **ci:** "could not find upvalue `lib`" error ([486a148](https://github.com/nvim-neorg/neorg/commit/486a148d1bf5b7fd14f52a771a0dacc1e6839174))
+* **ci:** supply correct version to the lua setup CI ([c814ef6](https://github.com/nvim-neorg/neorg/commit/c814ef68295baffefed7bfb8a48f8835f73a55a6))
+* **core/events:** fall back to the current window ID if it cannot be located ([22df349](https://github.com/nvim-neorg/neorg/commit/22df349df39d9401a95f7dc0e3dc13113f91a60a))
+* **dirman:** properly escape directories and filenames ([#1232](https://github.com/nvim-neorg/neorg/issues/1232)) ([e1f5556](https://github.com/nvim-neorg/neorg/commit/e1f5556bfbe50cbae262dffc35f376f7469f68cf))
+* do not add the line jump of a link to the jump list ([#1325](https://github.com/nvim-neorg/neorg/issues/1325)) ([918f2a3](https://github.com/nvim-neorg/neorg/commit/918f2a39f96e1447c00871eb611bed2018a047b5))
+* **export.markdown:** export `authors` metadata field key as `author` ([#1319](https://github.com/nvim-neorg/neorg/issues/1319)) ([f30ce72](https://github.com/nvim-neorg/neorg/commit/f30ce728e1b99e23320114c3bddb18be2776baf7))
+* **export.markdown:** fix incorrect reset of ordered list item count ([#1324](https://github.com/nvim-neorg/neorg/issues/1324)) ([ba58c1b](https://github.com/nvim-neorg/neorg/commit/ba58c1b29c9b013928025db345c6ff170e9693bf))
+
+## [8.1.0](https://github.com/nvim-neorg/neorg/compare/v8.0.1...v8.1.0) (2024-03-24)
+
+
+### Features
+
+* **todo_items:** convert TODO item to "on hold" if all items are done but the rest are on hold ([#1339](https://github.com/nvim-neorg/neorg/issues/1339)) ([c32b238](https://github.com/nvim-neorg/neorg/commit/c32b238438a8f1130c89c13a2284961fe10e3e68))
+
+
+### Bug Fixes
+
+* remove old and hacky code related to nvim-treesitter's query cache invalidation ([e8d8d1e](https://github.com/nvim-neorg/neorg/commit/e8d8d1e6608e53e366109fc4f9d7ab364ea0fb5c))
+
+## [8.0.1](https://github.com/nvim-neorg/neorg/compare/v8.0.0...v8.0.1) (2024-03-24)
+
+
+### Bug Fixes
+
+* broken wiki on github ([d4c10fe](https://github.com/nvim-neorg/neorg/commit/d4c10fe58519ce0d827cfc02f87832c75395045a))
+* **ci:** try to fix the wiki generator with luarocks ([27ac595](https://github.com/nvim-neorg/neorg/commit/27ac595d90481bd8fa2d13290289d46287346903))
+* **docgen:** invalid upvalues ([84ee928](https://github.com/nvim-neorg/neorg/commit/84ee928cd91db8705111c3d485e2a38ca5de61ec))
+* **luarocks:** add proper dependencies ([81328d1](https://github.com/nvim-neorg/neorg/commit/81328d17ed9d5509e7dea8f1efc0fa568535e0e0))
+
+
+### Reverts
+
+* return back old logger code ([a8151f1](https://github.com/nvim-neorg/neorg/commit/a8151f1e21445739c9574d5eba9f4c635688cf98))
+
+## [8.0.0](https://github.com/nvim-neorg/neorg/compare/v7.0.0...v8.0.0) (2024-03-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* use decoupled lua-utils instead of the regular neorg utils
+* **lib:** deprecate `lib.map`
+* deprecate `core.upgrade`
+* **concealer:** simpler config for ordered list icon & multichar icon for unordered list ([#1179](https://github.com/nvim-neorg/neorg/issues/1179))
+* **neorgcmd:** slowly move away from the deprecated `commands` directory
+* **highlights:** updated default groups to match names in treesitter
+
+### Features
+
+* add basic build.lua ([efac9eb](https://github.com/nvim-neorg/neorg/commit/efac9eb8c16cfe5cd1a45705d2add4eca749e63f))
+* add lua-utils.nvim to the list of required rocks ([b7b9eda](https://github.com/nvim-neorg/neorg/commit/b7b9edad6a852f33a2ce99051c748823dabd28cc))
+* add new dependencies for norgopolis ([0e88310](https://github.com/nvim-neorg/neorg/commit/0e883108d8c782335615cf2108a703847a1295d9))
+* add support for inline link targets ([132b73b](https://github.com/nvim-neorg/neorg/commit/132b73bfacd3014dc8afb56ddf7eed8c7acf6d6d))
+* auto complete links ([#1295](https://github.com/nvim-neorg/neorg/issues/1295)) ([bd12dac](https://github.com/nvim-neorg/neorg/commit/bd12dacc9cf561cbffc8d6f8f4b76aa9d734665b))
+* **concealer:** code block background `min_width` ([#1328](https://github.com/nvim-neorg/neorg/issues/1328)) ([efac835](https://github.com/nvim-neorg/neorg/commit/efac8350f4afe0b49f278129ef92ffb0a02d1c6f))
+* **concealer:** simpler config for ordered list icon & multichar icon for unordered list ([#1179](https://github.com/nvim-neorg/neorg/issues/1179)) ([da74d14](https://github.com/nvim-neorg/neorg/commit/da74d14f217dc81bc364758bbecea3c5e934ba60))
+* **concealer:** use empty foldmethod on nightly releases (for full folding passthrough) ([086891d](https://github.com/nvim-neorg/neorg/commit/086891d396ac9fccd91faf1520f563b6eb9eb942))
+* **export.markdown:** option to export latex `embed` tags ([0abe7b7](https://github.com/nvim-neorg/neorg/commit/0abe7b737d35f2abd082bc6f694cf5a9fc166fb7))
+* fix build.lua process (maybe once and for all?) ([eea6263](https://github.com/nvim-neorg/neorg/commit/eea6263ac4f3506d34d6e79839606e60b074757b))
+* include plenary as a dependency ([6ea1eff](https://github.com/nvim-neorg/neorg/commit/6ea1eff15d3f1fa947255a94f99cadb298c8b66f))
+* **keybinds:** add `opts` arg to `remap(_event)` ([27af839](https://github.com/nvim-neorg/neorg/commit/27af839eb6833f82765bc3066ab7e9b437233dd2))
+* prepare neorg.core.lib for extraction ([c4eb7e9](https://github.com/nvim-neorg/neorg/commit/c4eb7e96ea1e2a0a4b6d47e6bda4f6816a908262))
+* run sync-parsers as a build step ([9dd8331](https://github.com/nvim-neorg/neorg/commit/9dd8331bc1ad42117c7173cd5501b93570db85d5))
+* **summary:** reimplement nested categories ([#1274](https://github.com/nvim-neorg/neorg/issues/1274)) ([6202285](https://github.com/nvim-neorg/neorg/commit/6202285214e70efe0d861c5a4969f8ee817bc985))
+* undojoin timestamp updates ([#1272](https://github.com/nvim-neorg/neorg/issues/1272)) ([fe25e93](https://github.com/nvim-neorg/neorg/commit/fe25e93336b6a71b3cb3d7fd53ab6e4cb4a125c1))
+* when absolutely no parameters are supplied, load Neorg with core.defaults ([b6fb57b](https://github.com/nvim-neorg/neorg/commit/b6fb57b723c02255a9d0c0f1a8fc957fe007d9c2))
+
+
+### Bug Fixes
+
+* **build.lua:** install dependencies instead of the actual plugin itself (prevent conflicts) ([da25527](https://github.com/nvim-neorg/neorg/commit/da2552769b572c012ff2f0ee9c11e3a26f061252))
+* **build:** attempt to fix build script by deferring code execution ([fb45f83](https://github.com/nvim-neorg/neorg/commit/fb45f836da9dd43940c3fdd182e8255bbce9d9dc))
+* bump version of `norgopolis-server` to 1.3.1 ([0d8a7ec](https://github.com/nvim-neorg/neorg/commit/0d8a7ecae258e15f40e88bc3b312d2b92192743f))
+* **ci:** fix abs path to libs in luarc ([#1267](https://github.com/nvim-neorg/neorg/issues/1267)) ([0edde97](https://github.com/nvim-neorg/neorg/commit/0edde97b51a5247bd4db351a38d5f36131b642f7))
+* **ci:** wrong version on typecheck ([fb23d2e](https://github.com/nvim-neorg/neorg/commit/fb23d2e78bf6ee601ed1de2a9ded23d6201f7506))
+* **concealer:** footnote pattern should be matched against full string ([fc09cfc](https://github.com/nvim-neorg/neorg/commit/fc09cfc25e243a82653a758bc137395f4860b6f5))
+* **config:** add support for bsd operating systems ([#1281](https://github.com/nvim-neorg/neorg/issues/1281)) ([2bdb89c](https://github.com/nvim-neorg/neorg/commit/2bdb89c388d5c9e1956e7aab949ffb003e9a8ea5))
+* **config:** make the type system happy ([27482dc](https://github.com/nvim-neorg/neorg/commit/27482dcee4b14ed61a10ba51261919cb45351dad))
+* **core.keybinds:** type errors with events ([dbe2841](https://github.com/nvim-neorg/neorg/commit/dbe28417222e044bcbec5bb016f0d604004bcbb3))
+* **core.mode:** type errors with events ([fb2c561](https://github.com/nvim-neorg/neorg/commit/fb2c561f0080b621fd2853a3190d48f885a13b6d))
+* **core.neorgcmd:** type errors with events ([1ab6236](https://github.com/nvim-neorg/neorg/commit/1ab6236a954cf2de6fe4b736a66ca5a17d85a6ff))
+* **core.promo:** type errors with events ([0016fdd](https://github.com/nvim-neorg/neorg/commit/0016fdd8f2349dec1c1865f3412dbd08232b1bbd))
+* **core.syntax:** remove deprecated functions, fix type errors in the code ([221bb2e](https://github.com/nvim-neorg/neorg/commit/221bb2eb10c8d7b7f62537393a9dce385d36b638))
+* **core/modules:** reorder comments so that they are properly parsed by luals ([f20b40a](https://github.com/nvim-neorg/neorg/commit/f20b40a44a4e96ff9fa5ed252c3a678629adfda9))
+* **docgen:** make the wiki work again ([d44dd38](https://github.com/nvim-neorg/neorg/commit/d44dd387d8f553791671f52f691be7580b98c6db))
+* don't try to pull lua-utils when it's not applicable ([bcac799](https://github.com/nvim-neorg/neorg/commit/bcac79933f3930f04d9b1517106646a56efd8606))
+* enable source of `nvim-cmp` only norg file type ([#1298](https://github.com/nvim-neorg/neorg/issues/1298)) ([1ab15f4](https://github.com/nvim-neorg/neorg/commit/1ab15f4b30627fd5e6dd175a23c7360c2c08b2bd))
+* enforce contraint on norgopolis-server ([4b9f25c](https://github.com/nvim-neorg/neorg/commit/4b9f25ca9760e89702ccbe117d1ce17780b64641))
+* error with import loop ([16b5479](https://github.com/nvim-neorg/neorg/commit/16b54794a545d8f80c0e9007952e374df2e417cd))
+* **export.markdown:** fix error on unexported verbatim tags without parameters ([#1280](https://github.com/nvim-neorg/neorg/issues/1280)) ([e6d89d3](https://github.com/nvim-neorg/neorg/commit/e6d89d333aff65a771a98955fac9fc178345c01c))
+* **export.markdown:** fix html `embed` tags not being exported ([5b2022c](https://github.com/nvim-neorg/neorg/commit/5b2022caaf689dc1c78b8959a2547249f8b05769))
+* **export.markdown:** fix markdown `embed` tags not being exported ([f3d4230](https://github.com/nvim-neorg/neorg/commit/f3d4230d37da5d727d3ae13e1bada30e37b433ad))
+* **export.markdown:** fix the first `tag` always being exported by default ([bda456d](https://github.com/nvim-neorg/neorg/commit/bda456d6685545893d446e841f2ee41633b6548a))
+* **export.markdown:** use proper amount of parameters ([b0b5a43](https://github.com/nvim-neorg/neorg/commit/b0b5a4370228f27bd98516b9061bd6c87386c8f3))
+* **highlights:** updated default groups to match names in treesitter ([56ad805](https://github.com/nvim-neorg/neorg/commit/56ad8056b6180dba60ddbd5bca2f29de12f3bd1d))
+* **highlights:** updated unordered list, underline and strikethrough groups with standard names ([e7f524c](https://github.com/nvim-neorg/neorg/commit/e7f524c44f1a5d6fba6cced7e4eb3c22b9ff1473))
+* incorrect code in upgrade module ([07967f1](https://github.com/nvim-neorg/neorg/commit/07967f1982b589974958689c7a055b33ea194691))
+* **integrations.truezen:** use `setup()` instead of `load()` ([26cfe0e](https://github.com/nvim-neorg/neorg/commit/26cfe0e155c35695d2d4af7d938a9ffd160b8797))
+* **integrations.truezen:** use `setup()` instead of `load()` ([3506236](https://github.com/nvim-neorg/neorg/commit/3506236e292de6d7989b6d6541ed5fcfa1e73bab))
+* invalid vim.cmd syntax ([affdd6f](https://github.com/nvim-neorg/neorg/commit/affdd6fcbc2092fca293817d65e1664afbafe223))
+* nobody figured it out so away it goes :) ([7b3e794](https://github.com/nvim-neorg/neorg/commit/7b3e794aa8722826418501608c8a3ffe4e19ea30))
+* perform setup after the parsers have been installed ([f90c965](https://github.com/nvim-neorg/neorg/commit/f90c9654352f424690327271e3bd9a2c036489d0))
+* properly install parsers ([59b6d61](https://github.com/nvim-neorg/neorg/commit/59b6d619213506e405a8ed13669dc82120653ac5))
+* properly log TS error messages ([73db6b5](https://github.com/nvim-neorg/neorg/commit/73db6b51e9e28cce7ef17baf78a8416b563ca53a))
+* properly require lua-utils ([b8a78c0](https://github.com/nvim-neorg/neorg/commit/b8a78c0c84dcfd3996480339c3d10c6e1ade8363))
+* refactor library to not use lua utils ([5fcae0b](https://github.com/nvim-neorg/neorg/commit/5fcae0b080531ac1438faeefd47ae11e1633b463))
+* refresh lua cache upon succesful installation of dependencies ([f1473cf](https://github.com/nvim-neorg/neorg/commit/f1473cf9ab1c1b610758e28fcb9e8a792a51ddf4))
+* remove lua-utils from the loaded list to force a refresh ([af1e06c](https://github.com/nvim-neorg/neorg/commit/af1e06c801d6cb5682dde9a63b22053a8cf28665))
+* rename Neorg index message to be more insightful ([6d686cd](https://github.com/nvim-neorg/neorg/commit/6d686cdc064489ed17b49b6f1463fc9b3e5ba698))
+* **syntax:** ignore type annotation errors in syntax module ([6d94c2a](https://github.com/nvim-neorg/neorg/commit/6d94c2ac08f13208d84ce21b1e3eea13158b6491))
+* TSInstallSync not found ([df6cc22](https://github.com/nvim-neorg/neorg/commit/df6cc22f36e347856bc14807b9db396e67b927d7))
+* update module name to reflect breaking changes within `luarocks.nvim` ([1779e59](https://github.com/nvim-neorg/neorg/commit/1779e5962badca89505b60e9617b939489c661b0))
+* use lua-utils ([b1ce837](https://github.com/nvim-neorg/neorg/commit/b1ce8374a88d638f42f0ce97b3b4b6b2b4e89023))
+
+
+### Code Refactoring
+
+* deprecate `core.upgrade` ([45f51ed](https://github.com/nvim-neorg/neorg/commit/45f51ed759d9cdd6c69b67e57ecbd054fd4cbaba))
+* **lib:** deprecate `lib.map` ([8340274](https://github.com/nvim-neorg/neorg/commit/83402746b8b43190edb360329a023040bd388294))
+* **neorgcmd:** slowly move away from the deprecated `commands` directory ([560d5a0](https://github.com/nvim-neorg/neorg/commit/560d5a04fb8143aaa5e64ba8eb100df97631fa36))
+* use decoupled lua-utils instead of the regular neorg utils ([5f6bf7e](https://github.com/nvim-neorg/neorg/commit/5f6bf7e5444fe839d739bd376ec5cdb362f02dc6))
+
 ## [7.0.0](https://github.com/nvim-neorg/neorg/compare/v6.2.0...v7.0.0) (2023-12-28)
 
 
