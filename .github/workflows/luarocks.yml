@@ -2,11 +2,7 @@ name: Push to Luarocks
 
 on:
   push:
-    release:
-      types:
-        - created
-    tags:
-      - '*'
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -24,7 +20,7 @@ jobs:
           LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
         with:
           version: ${{ env.LUAROCKS_VERSION }}
-          test_interpreters: null
+          test_interpreters: ""
           dependencies: |
             nvim-nio ~> 1.7
             lua-utils.nvim == 1.0.2

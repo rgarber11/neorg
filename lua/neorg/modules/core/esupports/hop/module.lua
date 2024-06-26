@@ -13,6 +13,7 @@ prompted with a set of actions that you can perform on the broken link.
 
 local neorg = require("neorg.core")
 local config, lib, log, modules, utils = neorg.config, neorg.lib, neorg.log, neorg.modules, neorg.utils
+local links, dirman_utils
 
 local module = modules.create("core.esupports.hop")
 
@@ -23,11 +24,14 @@ module.setup = function()
             "core.integrations.treesitter",
             "core.ui",
             "core.dirman.utils",
+            "core.links",
         },
     }
 end
 
 module.load = function()
+    links = module.required["core.links"]
+    dirman_utils = module.required["core.dirman.utils"]
     modules.await("core.keybinds", function(keybinds)
         keybinds.register_keybind(module.name, "hop-link")
     end)
@@ -58,12 +62,53 @@ local function range_contains(r_out, r_in)
         and xy_le(r_in.row_end, r_in.column_end, r_out.row_end, r_out.column_end)
 end
 
+---@alias LinkType
+---|"url"
+---|"generic"
+---|"external_file"
+---|"definition"
+---|"timestamp"
+---|"footnote"
+---|"heading1"
+---|"heading2"
+---|"heading3"
+---|"heading4"
+---|"heading5"
+---|"heading6"
+---|"line_number"
+---|"wiki"
+
+---@class (exact) Link
+---@field link_node TSNode The treesitter node of the link.
+---@field link_file_text string? A provided path, if any.
+---@field link_type LinkType? The type of link that was provided.
+---@field link_location_text string? The target title/URL of the link.
+---@field link_description string? The description of the link, if provided.
+
+---@alias LinkTargetType
+--- |"buffer"
+--- |"external_app"
+--- |"external_file"
+--- |"wiki"
+--- |"calendar"
+
+---@class LinkTarget
+---@field original_title string The title of the link that points to this target.
+---@field node TSNode The node of the target.
+---@field type LinkTargetType The type of target that was located.
+---@field buffer number The buffer ID in which the target was found.
+
+---@class (exact) PotentialLinkFixes
+---@field similarity number The similarity of this candidate to the current title of the link.
+---@field text string The title of the candidate link title (will replace the existing link target).
+---@field node TSNode The node the fixed link points to.
+
 ---@class core.esupports.hop
 module.public = {
     --- Follow link from a specific node
-    ---@param node table
-    ---@param open_mode string|nil if not nil, will open a new split with the split mode defined (vsplitr...) or new tab (mode="tab") or with external app (mode="external")
-    ---@param parsed_link table a table of link information gathered from parse_link()
+    ---@param node TSNode
+    ---@param open_mode string? if not nil, will open a new split with the split mode defined (vsplitr...) or new tab (mode="tab") or with external app (mode="external")
+    ---@param parsed_link Link A table of link information gathered from parse_link()
     follow_link = function(node, open_mode, parsed_link)
         if node:type() == "anchor_declaration" then
             local located_anchor_declaration = module.public.locate_anchor_declaration_target(node)
@@ -81,7 +126,7 @@ module.public = {
         end
 
         if not parsed_link then
-            log.warn("Please parse your link before calling this function")
+            log.warn("Please parse your link before calling this function.")
             return
         end
 
@@ -139,6 +184,14 @@ module.public = {
             end
 
             lib.match(located_link_information.type)({
+                -- Filter the currently unsupported link types and let the user know that they do not work
+                wiki = function()
+                    vim.notify(
+                        "Neorg doesn't support wiki links yet, please use a more specific link type instead.",
+                        vim.log.levels.WARN
+                    )
+                end,
+
                 -- If we're dealing with a URI, simply open the URI in the user's preferred method
                 external_app = function()
                     os_open_link(located_link_information.uri)
@@ -148,7 +201,7 @@ module.public = {
                 external_file = function()
                     open_split()
 
-                    vim.api.nvim_cmd({ cmd = "edit", args = { located_link_information.path } }, {})
+                    dirman_utils.edit_file(located_link_information.path)
 
                     if located_link_information.line then
                         jump_to_line(located_link_information.line)
@@ -269,7 +322,7 @@ module.public = {
     end,
 
     --- Locate a `link` or `anchor` node under the cursor
-    ---@return userdata|nil #A `link` or `anchor` node if present under the cursor, else `nil`
+    ---@return TSNode? #A `link` or `anchor` node if present under the cursor, else `nil`
     extract_link_node = function()
         local ts_utils = module.required["core.integrations.treesitter"].get_ts_utils()
 
@@ -291,7 +344,7 @@ module.public = {
     end,
 
     --- Attempts to locate a `link` or `anchor` node after the cursor on the same line
-    ---@return userdata|nil #A `link` or `anchor` node if present on the current line, else `nil`
+    ---@return TSNode? #A `link` or `anchor` node if present on the current line, else `nil`
     lookahead_link_node = function()
         local ts_utils = module.required["core.integrations.treesitter"].get_ts_utils()
 
@@ -334,16 +387,15 @@ module.public = {
     end,
 
     --- Locates the node that an anchor is pointing to
-    ---@param anchor_decl_node table #A valid anchod declaration node
+    ---@param anchor_decl_node TSNode #A valid anchor declaration node
+    ---@return LinkTarget? #The target of the link if it was found.
     locate_anchor_declaration_target = function(anchor_decl_node)
         if not anchor_decl_node:named_child(0) then
             return
         end
 
-        local target = module
-            .required
-            ["core.integrations.treesitter"]
-            .get_node_text(anchor_decl_node:named_child(0):named_child(0)) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+        local target = module.required["core.integrations.treesitter"]
+            .get_node_text(anchor_decl_node:named_child(0):named_child(0))
             :gsub("[%s\\]", "")
 
         local query_str = [[
@@ -380,12 +432,13 @@ module.public = {
     end,
 
     --- Converts a link node into a table of data related to the link
-    ---@param link_node userdata #The link node that was found by e.g. `extract_link_node()`
+    ---@param link_node TSNode #The link node that was found by e.g. `extract_link_node()`
     ---@param buf number #The buffer to parse the link in
-    ---@return table? #A table of data about the link
+    ---@return Link? #A table of data about the link
     parse_link = function(link_node, buf)
         buf = buf or 0
-        if not link_node or not vim.tbl_contains({ "link", "anchor_definition" }, link_node:type()) then ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+
+        if not link_node or not vim.tbl_contains({ "link", "anchor_definition" }, link_node:type()) then
             return
         end
 
@@ -410,6 +463,7 @@ module.public = {
                             (link_target_heading5)
                             (link_target_heading6)
                             (link_target_line_number)
+                            (link_target_wiki)
                         ]? @link_type
                         text: (paragraph)? @link_location_text
                     )
@@ -438,6 +492,7 @@ module.public = {
                             (link_target_heading4)
                             (link_target_heading5)
                             (link_target_heading6)
+                            (link_target_wiki)
                         ]? @link_type
                         text: (paragraph)? @link_location_text
                     )
@@ -445,15 +500,18 @@ module.public = {
             ]
         ]]
 
+        ---@type TSNode?
         local document_root = module.required["core.integrations.treesitter"].get_document_root(buf)
 
         if not document_root then
             return
         end
 
+        ---@type vim.treesitter.Query
         local query = utils.ts_parse_query("norg", query_text)
         local range = module.required["core.integrations.treesitter"].get_node_range(link_node)
 
+        ---@type Link
         local parsed_link_information = {
             link_node = link_node,
         }
@@ -486,8 +544,8 @@ module.public = {
     end,
 
     --- Locate the target that a link points to
-    ---@param parsed_link_information table #A table returned by `parse_link()`
-    ---@return table #A table containing data about the link target
+    ---@param parsed_link_information Link #A table returned by `parse_link()`
+    ---@return LinkTarget #A table containing data about the link target
     locate_link_target = function(parsed_link_information)
         --- A pointer to the target buffer we will be parsing.
         -- This may change depending on the target file the user gave.
@@ -495,8 +553,7 @@ module.public = {
 
         -- Check whether our target is from a different file
         if parsed_link_information.link_file_text then
-            local expanded_link_text =
-                module.required["core.dirman.utils"].expand_path(parsed_link_information.link_file_text)
+            local expanded_link_text = dirman_utils.expand_path(parsed_link_information.link_file_text)
 
             if expanded_link_text ~= vim.fn.expand("%:p") then
                 -- We are dealing with a foreign file
@@ -514,12 +571,19 @@ module.public = {
         end
 
         return lib.match(parsed_link_information.link_type)({
+            -- Wiki links are currently unsupported, so we simply forward the link type
+            wiki = function()
+                return { type = "wiki" }
+            end,
+
             url = function()
                 return { type = "external_app", uri = parsed_link_information.link_location_text }
             end,
 
             external_file = function()
-                local destination = parsed_link_information.link_location_text
+                -- There has to be a link location present for a link to be recognized as an external file,
+                -- therefore we can safely assert here.
+                local destination = assert(parsed_link_information.link_location_text)
                 local path, line = string.match(destination, "^(.*):(%d+)$")
                 if line then
                     destination = path
@@ -532,11 +596,11 @@ module.public = {
                 return lib.match(vim.fn.fnamemodify(destination, ":e"))({
                     [{ "jpg", "jpeg", "png", "pdf" }] = {
                         type = "external_app",
-                        uri = vim.uri_from_fname(vim.fn.expand(destination)), ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                        uri = vim.uri_from_fname(vim.fn.expand(destination)),
                     },
                     [module.config.public.external_filetypes] = {
                         type = "external_app",
-                        uri = vim.uri_from_fname(vim.fn.expand(destination)), ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                        uri = vim.uri_from_fname(vim.fn.expand(destination)),
                     },
                     _ = function()
                         return {
@@ -579,72 +643,7 @@ module.public = {
             end,
 
             _ = function()
-                local query_str = lib.match(parsed_link_information.link_type)({
-                    generic = [[
-                        [(_
-                          [(strong_carryover_set
-                             (strong_carryover
-                               name: (tag_name) @tag_name
-                               (tag_parameters) @title
-                               (#eq? @tag_name "name")))
-                           (weak_carryover_set
-                             (weak_carryover
-                               name: (tag_name) @tag_name
-                               (tag_parameters) @title
-                               (#eq? @tag_name "name")))]?
-                          title: (paragraph_segment) @title)
-                         (inline_link_target
-                           (paragraph) @title)]
-                    ]],
-
-                    [{ "definition", "footnote" }] = string.format(
-                        [[
-                        (%s_list
-                            (strong_carryover_set
-                                  (strong_carryover
-                                    name: (tag_name) @tag_name
-                                    (tag_parameters) @title
-                                    (#eq? @tag_name "name")))?
-                            .
-                            [(single_%s
-                               (weak_carryover_set
-                                  (weak_carryover
-                                    name: (tag_name) @tag_name
-                                    (tag_parameters) @title
-                                    (#eq? @tag_name "name")))?
-                               (single_%s_prefix)
-                               title: (paragraph_segment) @title)
-                             (multi_%s
-                               (weak_carryover_set
-                                  (weak_carryover
-                                    name: (tag_name) @tag_name
-                                    (tag_parameters) @title
-                                    (#eq? @tag_name "name")))?
-                                (multi_%s_prefix)
-                                  title: (paragraph_segment) @title)])
-                        ]],
-                        lib.reparg(parsed_link_information.link_type, 5)
-                    ),
-                    _ = string.format(
-                        [[
-                            (%s
-                              [(strong_carryover_set
-                                 (strong_carryover
-                                   name: (tag_name) @tag_name
-                                   (tag_parameters) @title
-                                   (#eq? @tag_name "name")))
-                               (weak_carryover_set
-                                 (weak_carryover
-                                   name: (tag_name) @tag_name
-                                   (tag_parameters) @title
-                                   (#eq? @tag_name "name")))]?
-                              (%s_prefix)
-                              title: (paragraph_segment) @title)
-                        ]],
-                        lib.reparg(parsed_link_information.link_type, 2)
-                    ),
-                })
-
+                local query_str = links.get_link_target_query_string(parsed_link_information.link_type)
                 local document_root = module.required["core.integrations.treesitter"].get_document_root(buf_pointer)
 
                 if not document_root then
@@ -676,7 +675,7 @@ module.public = {
                     end
                 end
             end,
-        })
+        } --[[@as table<string, fun(): LinkTarget?>]])
     end,
 }
 
@@ -739,8 +738,8 @@ module.private = {
     end,
 
     --- Fuzzy fixes a link with a loose type checking query
-    ---@param parsed_link_information table #A table as returned by `parse_link()`
-    ---@return table #A table of similarities (fuzzed items)
+    ---@param parsed_link_information Link #A table as returned by `parse_link()`
+    ---@return PotentialLinkFixes[]? #A table of similarities (fuzzed items)
     fix_link_loose = function(parsed_link_information)
         local generic_query = [[
             [(_
@@ -763,8 +762,8 @@ module.private = {
     end,
 
     --- Fuzzy fixes a link with a strict type checking query
-    ---@param parsed_link_information table #A table as returned by `parse_link()`
-    ---@return table #A table of similarities (fuzzed items)
+    ---@param parsed_link_information Link #A table as returned by `parse_link()`
+    ---@return PotentialLinkFixes[]? #A table of similarities (fuzzed items)
     fix_link_strict = function(parsed_link_information)
         local query = lib.match(parsed_link_information.link_type)({
             generic = [[
@@ -837,13 +836,12 @@ module.private = {
     --- Query all similar targets that a link could be pointing to
     ---@param parsed_link_information table #A table as returned by `parse_link()`
     ---@param query_str string #The query to be used during the search
-    ---@return table #A table of similarities (fuzzed items)
+    ---@return PotentialLinkFixes[]? #A table of similarities (fuzzed items)
     fix_link = function(parsed_link_information, query_str)
         local buffer = vim.api.nvim_get_current_buf()
 
         if parsed_link_information.link_file_text then
-            local expanded_link_text =
-                module.required["core.dirman.utils"].expand_path(parsed_link_information.link_file_text)
+            local expanded_link_text = dirman_utils.expand_path(parsed_link_information.link_file_text)
 
             if expanded_link_text ~= vim.fn.expand("%:p") then
                 -- We are dealing with a foreign file
@@ -856,12 +854,11 @@ module.private = {
         local document_root = module.required["core.integrations.treesitter"].get_document_root(buffer)
 
         if not document_root then
-            return ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+            return
         end
 
-        local similarities = {
-            -- Example: { 0.6, "title", node }
-        }
+        ---@type PotentialLinkFixes[]
+        local similarities = {}
 
         for id, node in query:iter_captures(document_root, buffer) do
             local capture_name = query.captures[id]
@@ -889,9 +886,9 @@ module.private = {
     end,
 
     --- Writes a link that was fixed through fuzzing into the buffer
-    ---@param link_node userdata #The treesitter node of the link, extracted by e.g. `extract_link_node()`
-    ---@param parsed_link_information table #A table as returned by `parse_link()`
-    ---@param similarities table #The table of similarities as returned by `fix_link_*()`
+    ---@param link_node TSNode #The treesitter node of the link, extracted by e.g. `extract_link_node()`
+    ---@param parsed_link_information Link #A table as returned by `parse_link()`
+    ---@param similarities PotentialLinkFixes[] #The table of similarities as returned by `fix_link_*()`
     ---@param force_type boolean #If true will forcefully overwrite the link type to the target type as well (e.g. would convert `#` -> `*`)
     write_fixed_link = function(link_node, parsed_link_information, similarities, force_type)
         local most_similar = similarities[1]
@@ -930,11 +927,10 @@ module.private = {
                 { replace }
             )
         end
-
         callback(
             "{"
                 .. lib.when(
-                    parsed_link_information.link_file_text,
+                    parsed_link_information.link_file_text --[[@as boolean]],
                     lib.lazy_string_concat(":", parsed_link_information.link_file_text, ":"),
                     ""
                 )
@@ -942,7 +938,7 @@ module.private = {
                 .. most_similar.text
                 .. "}"
                 .. lib.when(
-                    parsed_link_information.link_description,
+                    parsed_link_information.link_description --[[@as boolean]],
                     lib.lazy_string_concat("[", parsed_link_information.link_description, "]"),
                     ""
                 )
@@ -954,7 +950,6 @@ module.on_event = function(event)
     if event.split_type[2] == "core.esupports.hop.hop-link" then
         local split_mode = event.content[1]
 
-        -- Get link node at cursor
         local link_node_at_cursor = module.public.extract_link_node()
 
         if not link_node_at_cursor then
@@ -962,9 +957,9 @@ module.on_event = function(event)
             return
         end
 
-        local parsed_link = module.public.parse_link(link_node_at_cursor) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+        local parsed_link = module.public.parse_link(link_node_at_cursor)
 
-        module.public.follow_link(link_node_at_cursor, split_mode, parsed_link) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+        module.public.follow_link(link_node_at_cursor, split_mode, parsed_link)
     end
 end
 

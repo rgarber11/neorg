@@ -236,7 +236,7 @@ module.public = {
             local root = tree:root()
 
             --- Recursively searches for a node of a given type
-            ---@param node userdata #The starting point for the search
+            ---@param node TSNode #The starting point for the search
             local function descend(node)
                 -- Iterate over all children of the node and try to match their type
                 for child, _ in node:iter_children() do ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
@@ -288,6 +288,17 @@ module.public = {
         descend(root)
     end,
     get_node_text = function(node, source)
+        if not node then
+            return ""
+        end
+
+        -- when source is the string contents of the file
+        if type(source) == "string" then
+            local _, _, start_bytes = node:start()
+            local _, _, end_bytes = node:end_()
+            return string.sub(source, start_bytes + 1, end_bytes)
+        end
+
         source = source or 0
 
         local start_row, start_col = node:start()
@@ -301,13 +312,112 @@ module.public = {
         end
 
         if start_row >= eof_row then
-            return nil
+            return ""
         end
 
         local lines = vim.api.nvim_buf_get_text(source, start_row, start_col, end_row, end_col, {})
 
         return table.concat(lines, "\n")
     end,
+
+    --- Get the range of a TSNode as an LspRange
+    ---@param node TSNode
+    ---@return lsp.Range
+    node_to_lsp_range = function(node)
+        local start_line, start_col, end_line, end_col = node:range()
+        return {
+            start = { line = start_line, character = start_col },
+            ["end"] = { line = end_line, character = end_col },
+        }
+    end,
+
+    --- Swap two nodes in the buffer. Ignores newlines at the end of the node
+    ---@param node1 TSNode
+    ---@param node2 TSNode
+    ---@param bufnr number
+    ---@param cursor_to_second boolean move the cursor to the start of the second node (default false)
+    swap_nodes = function(node1, node2, bufnr, cursor_to_second)
+        if not node1 or not node2 then
+            return
+        end
+        local range1 = module.public.node_to_lsp_range(node1)
+        local range2 = module.public.node_to_lsp_range(node2)
+
+        local text1 = module.public.get_node_text(node1, bufnr)
+        local text2 = module.public.get_node_text(node2, bufnr)
+
+        if not text1 or not text2 then
+            return
+        end
+
+        text1 = vim.split(text1, "\n")
+        text2 = vim.split(text2, "\n")
+
+        ---remove trailing blank lines from the text, and update the corresponding range appropriately
+        ---@param text string[]
+        ---@param range table
+        local function remove_trailing_blank_lines(text, range)
+            local end_line_offset = 0
+            while text[#text] == "" do
+                text[#text] = nil
+                end_line_offset = end_line_offset + 1
+            end
+            range["end"] = {
+                character = string.len(text[#text]),
+                line = range["end"].line - end_line_offset,
+            }
+            if #text == 1 then -- ie. start and end lines are equal
+                range["end"].character = range["end"].character + range.start.character
+            end
+        end
+
+        remove_trailing_blank_lines(text1, range1)
+        remove_trailing_blank_lines(text2, range2)
+
+        local edit1 = { range = range1, newText = table.concat(text2, "\n") }
+        local edit2 = { range = range2, newText = table.concat(text1, "\n") }
+
+        vim.lsp.util.apply_text_edits({ edit1, edit2 }, bufnr, "utf-8")
+
+        if cursor_to_second then
+            -- set jump location
+            vim.cmd("normal! m'")
+
+            local char_delta = 0
+            local line_delta = 0
+            if
+                range1["end"].line < range2.start.line
+                or (range1["end"].line == range2.start.line and range1["end"].character <= range2.start.character)
+            then
+                line_delta = #text2 - #text1
+            end
+
+            if range1["end"].line == range2.start.line and range1["end"].character <= range2.start.character then
+                if line_delta ~= 0 then
+                    --- why?
+                    --correction_after_line_change =  -range2.start.character
+                    --text_now_before_range2 = #(text2[#text2])
+                    --space_between_ranges = range2.start.character - range1["end"].character
+                    --char_delta = correction_after_line_change + text_now_before_range2 + space_between_ranges
+                    --- Equivalent to:
+                    char_delta = #text2[#text2] - range1["end"].character
+
+                    -- add range1.start.character if last line of range1 (now text2) does not start at 0
+                    if range1.start.line == range2.start.line + line_delta then
+                        char_delta = char_delta + range1.start.character
+                    end
+                else
+                    char_delta = #text2[#text2] - #text1[#text1]
+                end
+            end
+
+            vim.api.nvim_win_set_cursor(
+                vim.api.nvim_get_current_win(),
+                { range2.start.line + 1 + line_delta, range2.start.character + char_delta }
+            )
+        end
+    end,
+
     --- Returns the first node of given type if present
     ---@param type string #The type of node to search for
     ---@param buf number #The buffer to search in
@@ -361,7 +471,7 @@ module.public = {
             end
 
             --- Recursively searches for a node of a given type
-            ---@param node userdata #The starting point for the search
+            ---@param node TSNode #The starting point for the search
             local function descend(node)
                 -- Iterate over all children of the node and try to match their type
                 for child, _ in node:iter_children() do ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
@@ -486,7 +596,7 @@ module.public = {
     --- Extracts the document root from the current document or from the string
     ---@param src number|string The number of the buffer to extract or string with code (can be nil)
     ---@param filetype string? #The filetype of the buffer or the string with code
-    ---@return userdata? #The root node of the document
+    ---@return TSNode? #The root node of the document
     get_document_root = function(src, filetype)
         filetype = filetype or "norg"
 
@@ -567,19 +677,19 @@ module.public = {
         return descendant
     end,
 
-    get_document_metadata = function(buf, no_trim)
-        buf = buf or 0
+    ---get document's metadata
+    ---@param source number | string | PathlibPath
+    ---@param no_trim boolean
+    ---@return table?
+    get_document_metadata = function(source, no_trim)
+        source = source or 0
 
-        local norg_parser = vim.treesitter.get_parser(buf, "norg")
-
+        local norg_parser, iter_src = module.public.get_ts_parser(source)
         if not norg_parser then
             return
         end
 
-        local result = {}
-
         local norg_tree = norg_parser:parse()[1]
-
         if not norg_tree then
             return
         end
@@ -588,26 +698,21 @@ module.public = {
             return no_trim and value or vim.trim(value)
         end
 
-        local function get_node_text_from_str(n, s)
-            local _, _, start_bytes = n:start()
-            local _, _, end_bytes = n:end_()
-            return string.sub(s, start_bytes, end_bytes)
-        end
-
-        local function parse_data(node, str)
+        local result = {}
+        local function parse_data(node, src)
             return lib.match(node:type())({
                 string = function()
-                    return trim(get_node_text_from_str(node, str))
+                    return trim(module.public.get_node_text(node, src))
                 end,
                 number = function()
-                    return tonumber(get_node_text_from_str(node, str))
+                    return tonumber(module.public.get_node_text(node, src))
                 end,
                 array = function()
                     local resulting_array = {}
 
                     for child in node:iter_children() do
                         if child:named() then
-                            local parsed_data = parse_data(child, str)
+                            local parsed_data = parse_data(child, src)
 
                             if parsed_data then
                                 table.insert(resulting_array, parsed_data)
@@ -632,9 +737,9 @@ module.public = {
                             goto continue
                         end
 
-                        local key_content = trim(get_node_text_from_str(key, str))
+                        local key_content = trim(module.public.get_node_text(key, src))
 
-                        resulting_object[key_content] = (value and parse_data(value, str) or vim.NIL)
+                        resulting_object[key_content] = (value and parse_data(value, src) or vim.NIL)
 
                         ::continue::
                     end
@@ -669,9 +774,9 @@ module.public = {
         )
 
         local meta_node
-        for id, node in norg_query:iter_captures(norg_tree:root(), buf) do
+        for id, node in norg_query:iter_captures(norg_tree:root(), iter_src) do
             if norg_query.captures[id] == "tag_name" then
-                local tag_name = trim(module.public.get_node_text(node, buf))
+                local tag_name = trim(module.public.get_node_text(node, iter_src))
                 if tag_name == "document.meta" then
                     meta_node = node:next_named_sibling() or vim.NIL
                     break
@@ -683,9 +788,9 @@ module.public = {
             return result
         end
 
-        local meta_source = module.public.get_node_text(meta_node, buf)
+        local meta_source = module.public.get_node_text(meta_node, iter_src)
 
-        local norg_meta_parser = vim.treesitter.get_string_parser(meta_source, "norg_meta") ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+        local norg_meta_parser = vim.treesitter.get_string_parser(meta_source, "norg_meta")
 
         local norg_meta_tree = norg_meta_parser:parse()[1]
 
@@ -695,12 +800,12 @@ module.public = {
 
         for id, node in meta_query:iter_captures(norg_meta_tree:root(), meta_source) do
             if meta_query.captures[id] == "key" then
-                local key = trim(get_node_text_from_str(node, meta_source))
+                local key = trim(module.public.get_node_text(node, meta_source))
 
                 local val
                 if key == "title" then
                     -- force title's value as string type
-                    val = trim(get_node_text_from_str(node:next_named_sibling(), meta_source))
+                    val = trim(module.public.get_node_text(node:next_named_sibling(), meta_source))
                 else
                     val = node:next_named_sibling() and parse_data(node:next_named_sibling(), meta_source) or vim.NIL
                 end
@@ -713,25 +818,58 @@ module.public = {
     end,
     --- Parses a query and automatically executes it for Norg
     ---@param query_string string #The query string
-    ---@param callback function #The callback to execute with all the value returned by iter_captures
-    ---@param buffer number #The buffer ID for the query
+    ---@param callback function #The callback to execute with all values returned by
+    ---`Query:iter_captures()`. When callback returns true, this function returns early
+    ---@param source number | string | PathlibPath #buf number, or file path or 0 for current buffer
     ---@param start number? #The start line for the query
     ---@param finish number? #The end line for the query
-    execute_query = function(query_string, callback, buffer, start, finish)
+    execute_query = function(query_string, callback, source, start, finish)
         local query = utils.ts_parse_query("norg", query_string)
-        local root = module.public.get_document_root(buffer)
+        local norg_parser, iter_src = module.public.get_ts_parser(source)
 
-        if not root then
+        if not norg_parser then
             return false
         end
 
-        for id, node, metadata in query:iter_captures(root, buffer, start, finish) do
+        local root = norg_parser:parse()[1]:root()
+        for id, node, metadata in query:iter_captures(root, iter_src, start, finish) do
             if callback(query, id, node, metadata) == true then
                 return true
             end
         end
 
         return true
+    end,
+
+    ---Create a norg TS parser from the given source
+    ---@param source string | number | PathlibPath file path or buf number or 0 for current buffer
+    ---@return vim.treesitter.LanguageTree? norg_parser
+    ---@return string | number iter_src the corresponding source that you must pass to
+    ---`iter_query()`, either the full file text, or the buffer number
+    get_ts_parser = function(source)
+        local norg_parser
+        local iter_src
+        if type(source) ~= "string" and type(source) ~= "number" then
+            source = tostring(source)
+        end
+        if type(source) == "string" then
+            -- check if the file is open; use the buffer contents if it is
+            if vim.fn.bufnr(source) ~= -1 then ---@diagnostic disable-line
+                source = vim.uri_to_bufnr(vim.uri_from_fname(source))
+            else
+                iter_src = io.open(source, "r"):read("*a")
+                norg_parser = vim.treesitter.get_string_parser(iter_src, "norg")
+            end
+        end
+        if type(source) == "number" then
+            if source == 0 then
+                source = vim.api.nvim_get_current_buf()
+            end
+            norg_parser = vim.treesitter.get_parser(source, "norg")
+            iter_src = source
+        end
+
+        return norg_parser, iter_src
     end,
 }
 

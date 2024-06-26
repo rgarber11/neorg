@@ -83,6 +83,7 @@ local has_anticonceal = (function()
     sub_version = tonumber(sub_version)
     return sub_version and sub_version > 575
 end)()
+local has_extmark_invalidation = utils.is_minimum_version(0, 10, 0)
 
 local module = modules.create("core.concealer", {
     "preset_basic",
@@ -138,6 +139,10 @@ local function set_mark(bufid, row_0b, col_0b, text, highlight, ext_opts)
         spell = nil,
         ui_watched = nil,
     }
+
+    if has_extmark_invalidation then
+        opt["invalidate"] = true
+    end
 
     if ext_opts then
         table_extend_in_place(opt, ext_opts)

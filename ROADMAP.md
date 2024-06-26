@@ -16,7 +16,7 @@ It will be switched to a `.norg` file when possible.
 ## Miscellaneous
 
 - [ ] Make `core.clipboard.code-blocks` work with a visual selection.
-- [ ] Reimplement the `core.maneouvre` module, which has been deprecated since `1.0`.
+- [x] Reimplement the `core.maneouvre` module, which has been deprecated since `1.0`.
 - [ ] The `a` and `b` commands in the hop module are not implemented.
 - [ ] Readd colouring to TODO items.
 
@@ -33,7 +33,7 @@ For the motivation behind this, see the [external tools](#external-tooling) sect
 ## Documentation
 
 - [ ] Develop and ship a Neorg landing page with documentation, presumably with docasaurus.
-    - [ ] Provide a written tutorial on how to get started with Neorg.
+    - [x] Provide a written tutorial on how to get started with Neorg.
     - [ ] Provided a tutorial on how to develop for Neorg (modules, events, etc.).
 - [ ] Provide a dropdown in the wiki which will display a module's entire configuration as a lua snippet.
 

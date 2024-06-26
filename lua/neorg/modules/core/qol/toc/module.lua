@@ -1,7 +1,7 @@
 --[[
     file: TOC
     title: A Bird's Eye View of Norg Documents
-    description: The TOC module geneates a table of contents for a given Norg buffer.
+    description: The TOC module generates a table of contents for a given Norg buffer.
     summary: Generates a table of contents for a given Norg buffer.
     ---
 
@@ -17,7 +17,7 @@ Norg document. The TOC view updates automatically when switching buffers.
 --]]
 
 local neorg = require("neorg.core")
-local modules, utils = neorg.modules, neorg.utils
+local modules, utils, log = neorg.modules, neorg.utils, neorg.log
 
 local module = modules.create("core.qol.toc")
 
@@ -40,20 +40,47 @@ module.load = function()
             },
         })
     end)
+
+    if module.config.public.auto_toc.open then
+        vim.api.nvim_create_autocmd("BufEnter", {
+            pattern = "*.norg",
+            callback = function()
+                local win = vim.api.nvim_get_current_win()
+                vim.cmd([[Neorg toc]])
+                if not module.config.public.auto_toc.enter then
+                    vim.api.nvim_set_current_win(win)
+                end
+            end,
+        })
+    end
 end
 
 module.config.public = {
-    -- If `true`, will close the Table of Contents after an entry in the table
-    -- is picked.
+    -- close the Table of Contents after an entry in the table is picked
     close_after_use = false,
 
-    -- If `true`, the width of the Table of Contents window will automatically
-    -- fit its longest line
+    -- width of the Table of Contents window will automatically fit its longest line, up to
+    -- `max_width`
     fit_width = true,
 
-    -- If `true`, `cursurline` will be enabled (highlighted) in the ToC window,
-    -- and the cursor position between ToC and content window will be synchronized.
+    -- enable `cursorline` in the ToC window, and sync the cursor position between ToC and content
+    -- window
     sync_cursorline = true,
+
+    -- max width of the ToC window when `fit_width = true` (in columns)
+    max_width = 30,
+
+    -- options for automatically opening/entering the ToC window
+    auto_toc = {
+        -- automatically open a ToC window when entering any `norg` buffer
+        open = false,
+        -- enter an automatically opened ToC window
+        enter = false,
+        -- automatically close the ToC window when there is no longer an open norg buffer
+        close = true,
+        -- will exit nvim if the ToC is the last buffer on the screen, similar to help windows
+        exit_nvim = true,
+    },
 }
 
 local ui_data_of_tabpage = {}
@@ -93,16 +120,17 @@ end
 
 local toc_query
 
+---@class core.qol.toc
 module.public = {
     parse_toc_macro = function(buffer)
         local toc, toc_name = false, nil
 
         local success = module.required["core.integrations.treesitter"].execute_query(
             [[
-        (infirm_tag
-            (tag_name) @name
-            (tag_parameters)? @parameters)
-        ]],
+                (infirm_tag
+                    (tag_name) @name
+                    (tag_parameters)? @parameters)
+            ]],
             function(query, id, node)
                 local capture_name = query.captures[id]
 
@@ -209,6 +237,11 @@ module.public = {
         local ui_buffer = ui_data.buffer
         ui_data.norg_buffer = norg_buffer
 
+        if not vim.api.nvim_buf_is_valid(ui_buffer) then
+            log.error("update_toc called with invalid ui buffer")
+            return
+        end
+
         vim.bo[ui_buffer].modifiable = true
         vim.api.nvim_buf_clear_namespace(norg_buffer, toc_namespace, 0, -1)
 
@@ -292,8 +325,21 @@ module.public = {
                 end
 
                 local norg_window = vim.fn.bufwinid(norg_buffer)
-                vim.api.nvim_set_current_win(norg_window)
-                vim.api.nvim_set_current_buf(norg_buffer)
+                if norg_window == -1 then
+                    local toc_window = vim.fn.bufwinid(ui_data.buffer)
+                    local buf_width = nil
+                    if toc_window ~= -1 then
+                        buf_width = vim.api.nvim_win_get_width(toc_window) - module.private.get_toc_width(ui_data)
+                        if buf_width < 1 then
+                            buf_width = nil
+                        end
+                    end
+                    norg_window =
+                        vim.api.nvim_open_win(norg_buffer, true, { win = 0, vertical = true, width = buf_width })
+                else
+                    vim.api.nvim_set_current_win(norg_window)
+                    vim.api.nvim_set_current_buf(norg_buffer)
+                end
                 vim.api.nvim_win_set_cursor(norg_window, { location[1] + 1, location[2] })
 
                 if module.config.public.close_after_use then
@@ -308,21 +354,33 @@ module.public = {
     end,
 }
 
-local function get_max_virtcol()
-    local n_line = vim.fn.line("$")
-    local result = 1
-    for i = 1, n_line do
-        -- FIXME: for neovim <=0.9.*, virtcol() doesn't accept winid argument
-        result = math.max(result, vim.fn.virtcol({ i, "$" }))
-    end
-    return result
-end
+module.private = {
+    ---set the width of the ToC window
+    get_toc_width = function(ui_data)
+        local max_virtcol_1bex = module.private.get_max_virtcol()
+        local current_winwidth = vim.fn.winwidth(vim.fn.bufwinid(ui_data.buffer))
+        local new_winwidth = math.min(current_winwidth, math.max(module.config.public.max_width, max_virtcol_1bex - 1))
+        return new_winwidth + 1
+    end,
+
+    get_max_virtcol = function()
+        local n_line = vim.fn.line("$")
+        local result = 1
+        for i = 1, n_line do
+            result = math.max(result, vim.fn.virtcol({ i, "$" }))
+        end
+        return result
+    end,
+}
 
 local function get_norg_ui(norg_buffer)
     local tabpage = vim.api.nvim_win_get_tabpage(vim.fn.bufwinid(norg_buffer))
     return ui_data_of_tabpage[tabpage]
 end
 
+---Guard an autocommand callback function with a check that the ToC is still open
+---@param listener function
+---@return function
 local function unlisten_if_closed(listener)
     return function(ev)
         if vim.tbl_isempty(ui_data_of_tabpage) then
@@ -352,6 +410,7 @@ local function create_ui(tabpage, mode)
     ui_wo.foldmethod = "expr"
     ui_wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
     ui_wo.foldlevel = 99
+    ui_wo.winfixbuf = true
 
     if module.config.public.sync_cursorline then
         ui_wo.cursorline = true
@@ -360,6 +419,7 @@ local function create_ui(tabpage, mode)
     local ui_data = {
         buffer = ui_buffer,
         tabpage = tabpage,
+        window = ui_window,
     }
 
     ui_data_of_tabpage[tabpage] = ui_data
@@ -392,19 +452,19 @@ module.on_event = function(event)
 
     local tabpage = vim.api.nvim_win_get_tabpage(vim.fn.bufwinid(norg_buffer))
     if ui_data_of_tabpage[tabpage] then
+        if norg_buffer == ui_data_of_tabpage[tabpage].buffer then
+            return
+        end
         module.public.update_toc(toc_title, ui_data_of_tabpage[tabpage], norg_buffer)
         return
     end
 
-    local ui_data = ui_data_of_tabpage[tabpage] or create_ui(tabpage, (event.content[1] or "left") == "left")
+    local ui_data = create_ui(tabpage, (event.content[1] or "left") == "left")
 
     module.public.update_toc(toc_title, ui_data_of_tabpage[tabpage], norg_buffer)
 
     if module.config.public.fit_width then
-        local max_virtcol_1bex = get_max_virtcol()
-        local current_winwidth = vim.fn.winwidth(vim.fn.bufwinid(ui_data.buffer))
-        local new_winwidth = math.min(current_winwidth, math.max(30, max_virtcol_1bex - 1))
-        vim.cmd(("vertical resize %d"):format(new_winwidth + 1)) -- +1 for margin
+        vim.cmd(("vertical resize %d"):format(module.private.get_toc_width(ui_data)))
     end
 
     local close_buffer_callback = function()
@@ -415,17 +475,12 @@ module.on_event = function(event)
         ui_data_of_tabpage[tabpage] = nil
     end
 
-    vim.api.nvim_buf_set_keymap(ui_data.buffer, "n", "q", "", {
-        callback = close_buffer_callback,
-    })
+    vim.keymap.set("n", "q", close_buffer_callback, { buffer = ui_data.buffer })
 
+    --- WinClosed matches against the win number as a string, not the buf number
     vim.api.nvim_create_autocmd("WinClosed", {
-        pattern = "*",
-        callback = function(ev)
-            if ev.buf == ui_data.buffer then
-                close_buffer_callback()
-            end
-        end,
+        pattern = tostring(ui_data.window),
+        callback = close_buffer_callback,
     })
 
     vim.api.nvim_create_autocmd("BufWritePost", {
@@ -505,6 +560,43 @@ module.on_event = function(event)
             pattern = "*.norg",
             callback = unlisten_if_closed(function(_norg_buffer, _ui_data)
                 vim.cmd("normal! m'")
+            end),
+        })
+    end
+
+    if module.config.public.auto_toc.exit_nvim then
+        vim.api.nvim_create_autocmd("WinEnter", {
+            buffer = ui_data.buffer,
+            callback = unlisten_if_closed(function(_, _)
+                vim.schedule(function()
+                    -- count the number of 'real' (non-floating) windows. This avoids noice popups
+                    -- and nvim notify popups causing nvim to stay open
+                    local real_windows = vim.iter(vim.api.nvim_list_wins())
+                        :filter(function(win)
+                            return vim.api.nvim_win_get_config(win).relative == ""
+                        end)
+                        :totable()
+                    if #real_windows == 1 then
+                        vim.schedule(vim.cmd.q)
+                    end
+                end)
+            end),
+        })
+    end
+
+    if module.config.public.auto_toc.close then
+        vim.api.nvim_create_autocmd("BufWinLeave", {
+            pattern = "*.norg",
+            callback = unlisten_if_closed(function(_buf, ui)
+                vim.schedule(function()
+                    if vim.fn.winnr("$") > 1 then
+                        local win = vim.fn.bufwinid(ui.buffer)
+                        if win ~= -1 then
+                            vim.api.nvim_win_close(win, true)
+                            close_buffer_callback()
+                        end
+                    end
+                end)
             end),
         })
     end

@@ -79,7 +79,7 @@ docgen.get_module_top_comment = function(buf)
     local comment = vim.split(ts.get_node_text(node, buf), "\n")
 
     -- Stops execution if it's not a multiline comment
-    if not comment[1] == "--[[" or not comment[#comment] == "--]]" then
+    if comment[1] ~= "--[[" or comment[#comment] ~= "--]]" then
         return
     end
 
@@ -499,7 +499,7 @@ docgen.generators = {
                 end
 
                 return docgen.evaluate_functions({
-                    "# Required Modules",
+                    "# Dependencies",
                     "",
                     list_modules_with_predicate(module_list, function()
                         return true

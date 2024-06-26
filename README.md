@@ -85,10 +85,25 @@ The recommended installation method is via [rocks.nvim](https://github.com/nvim-
 
 - Run `:Rocks install rocks-config.nvim` (if you don't have it already!).
 - Run `:Rocks install neorg`.
-- Add the following to your config's `lua/plugins/neorg.lua`:
+- From the root of your configuration (`~/.config/nvim/` on unix-like systems), create a `lua/plugins/neorg.lua` file and place the following content inside:
   ```lua
   require("neorg").setup()
   ```
+
+For the time being you also need `nvim-treesitter` installed, but the plugin is not readily available on luarocks yet.
+To counter this, you also need to run the following:
+- `:Rocks install rocks-git.nvim`
+- `:Rocks install nvim-treesitter/nvim-treesitter`
+- Just like the `neorg.lua` file, create a `lua/plugins/treesitter.lua` file and place the following content inside:
+  ```lua
+  require("nvim-treesitter.configs").setup({
+    highlight = {
+      enable = true,
+    },
+  })
+  ```
+
+The last three steps will eventually not be required to run Neorg.
 
 </details>
 
@@ -192,6 +207,6 @@ Immense thank you to all of the sponsors of my work!
 
 <div align="center">
 
-<!-- sponsors --><a href="https://github.com/vsedov"><img src="https://github.com/vsedov.png" width="60px" alt="vsedov" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/skbolton"><img src="https://github.com/skbolton.png" width="60px" alt="skbolton" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/molleweide"><img src="https://github.com/molleweide.png" width="60px" alt="molleweide" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/danymat"><img src="https://github.com/danymat.png" width="60px" alt="danymat" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/theherk"><img src="https://github.com/theherk.png" width="60px" alt="theherk" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/purepani"><img src="https://github.com/purepani.png" width="60px" alt="purepani" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/tromars"><img src="https://github.com/tromars.png" width="60px" alt="tromars" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/jgregoire"><img src="https://github.com/jgregoire.png" width="60px" alt="jgregoire" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/bottd"><img src="https://github.com/bottd.png" width="60px" alt="bottd" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/DingDean"><img src="https://github.com/DingDean.png" width="60px" alt="DingDean" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/tamton-aquib"><img src="https://github.com/tamton-aquib.png" width="60px" alt="tamton-aquib" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/liuqiyucn"><img src="https://github.com/liuqiyucn.png" width="60px" alt="liuqiyucn" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/mortymacs"><img src="https://github.com/mortymacs.png" width="60px" alt="mortymacs" /></a>&nbsp;&nbsp;&nbsp;<!-- sponsors -->
+<!-- sponsors --><a href="https://github.com/vsedov"><img src="https://github.com/vsedov.png" width="60px" alt="vsedov" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/skbolton"><img src="https://github.com/skbolton.png" width="60px" alt="skbolton" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/molleweide"><img src="https://github.com/molleweide.png" width="60px" alt="molleweide" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/danymat"><img src="https://github.com/danymat.png" width="60px" alt="danymat" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/theherk"><img src="https://github.com/theherk.png" width="60px" alt="theherk" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/purepani"><img src="https://github.com/purepani.png" width="60px" alt="purepani" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/tromars"><img src="https://github.com/tromars.png" width="60px" alt="tromars" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/jgregoire"><img src="https://github.com/jgregoire.png" width="60px" alt="jgregoire" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/bottd"><img src="https://github.com/bottd.png" width="60px" alt="bottd" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/DingDean"><img src="https://github.com/DingDean.png" width="60px" alt="DingDean" /></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/mtrajano"><img src="https://github.com/mtrajano.png" width="60px" alt="mtrajano" /></a>&nbsp;&nbsp;&nbsp;<!-- sponsors -->
 
 </div>
