@@ -188,7 +188,7 @@ module.public = {
                 if clean_snippet == original_snippet then
                     -- this is a normal math block, we need to remove leading `\` chars
                     -- TODO: test that this regex is actually correct
-                    clean_snippet = string.gsub(clean_snippet, "\\(.)", "%1")
+                    -- clean_snippet = string.gsub(clean_snippet, "\\(.)", "%1")
                 end
                 -- `- 2` for the two `$`s
                 if string.len(clean_snippet) - 2 < module.config.public.min_length then
