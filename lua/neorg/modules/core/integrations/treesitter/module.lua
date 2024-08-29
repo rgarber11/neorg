@@ -44,7 +44,7 @@ module.private = {
 }
 
 module.setup = function()
-    return { success = true, requires = { "core.highlights", "core.mode" } }
+    return { success = true, requires = { "core.highlights" } }
 end
 
 module.load = function()
@@ -101,11 +101,26 @@ module.load = function()
 
     module.private.ts_utils = ts_utils
 
-    module.required["core.mode"].add_mode("traverse-heading")
-    module.required["core.mode"].add_mode("traverse-link")
-    modules.await("core.keybinds", function(keybinds)
-        keybinds.register_keybinds(module.name, { "next.heading", "previous.heading", "next.link", "previous.link" })
-    end)
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.treesitter.next.heading)",
+        lib.wrap(module.public.goto_next_query_match, module.private.heading_query)
+    )
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.treesitter.next.link)",
+        lib.wrap(module.public.goto_next_query_match, module.private.link_query)
+    )
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.treesitter.previous.heading)",
+        lib.wrap(module.public.goto_previous_query_match, module.private.heading_query)
+    )
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.treesitter.previous.link)",
+        lib.wrap(module.public.goto_previous_query_match, module.private.link_query)
+    )
 end
 
 module.config.public = {
@@ -215,9 +230,9 @@ module.public = {
         end
     end,
     ---  Gets all nodes of a given type from the AST
-    ---@param  type string #The type of node to filter out
+    ---@param node_type string #The type of node to filter out
     ---@param opts? table #A table of two options: `buf` and `ft`, for the buffer and format to use respectively.
-    get_all_nodes = function(type, opts)
+    get_all_nodes = function(node_type, opts)
         local result = {}
         opts = opts or {}
 
@@ -231,31 +246,55 @@ module.public = {
 
         -- Do we need to go through each tree? lol
         vim.treesitter.get_parser(opts.buf, opts.ft):for_each_tree(function(tree)
-            -- Get the root for that tree
-            ---@type TSNode
-            local root = tree:root()
+            table.insert(result, module.public.search_tree(tree, node_type))
+        end)
 
-            --- Recursively searches for a node of a given type
-            ---@param node TSNode #The starting point for the search
-            local function descend(node)
-                -- Iterate over all children of the node and try to match their type
-                for child, _ in node:iter_children() do ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
-                    if child:type() == type then
-                        table.insert(result, child)
-                    else
-                        -- If no match is found try descending further down the syntax tree
-                        for _, child_node in ipairs(descend(child) or {}) do
-                            table.insert(result, child_node)
-                        end
+        return vim.iter(result):flatten():totable()
+    end,
+
+    ---Gets all nodes of a given type from the AST
+    ---@param node_type string #The type of node to filter out
+    ---@param path string path to the file to parse
+    ---@param filetype string? file type of the file or `norg` if omitted
+    get_all_nodes_in_file = function(node_type, path, filetype)
+        path = vim.fs.normalize(path)
+        if not filetype then
+            filetype = "norg"
+        end
+
+        local contents = io.open(path, "r"):read("*a")
+        local tree = vim.treesitter.get_string_parser(contents, filetype):parse()[1]
+        if not (tree or tree.root) then
+            return {}
+        end
+
+        return module.public.search_tree(tree, node_type)
+    end,
+
+    search_tree = function(tree, node_type)
+        local result = {}
+        local root = tree:root()
+
+        --- Recursively searches for a node of a given type
+        ---@param node TSNode #The starting point for the search
+        local function descend(node)
+            -- Iterate over all children of the node and try to match their type
+            for child, _ in node:iter_children() do
+                if child:type() == node_type then
+                    table.insert(result, child)
+                else
+                    -- If no match is found try descending further down the syntax tree
+                    for _, child_node in ipairs(descend(child) or {}) do
+                        table.insert(result, child_node)
                     end
                 end
             end
+        end
 
-            descend(root)
-        end)
-
+        descend(root)
         return result
     end,
+
     --- Executes function callback on each child node of the root
     ---@param callback function
     ---@param ts_tree any #Optional syntax tree ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
@@ -495,8 +534,9 @@ module.public = {
         return result
     end,
     --- Given a node this function will break down the AST elements and return the corresponding text for certain nodes
-    -- @Param  tag_node (userdata/treesitter node) - a node of type tag/carryover_tag
-    get_tag_info = function(tag_node)
+    --- @param tag_node TSNode - a node of type tag/carryover_tag
+    --- @param throw boolean - when true, throw an error instead of logging and returning on failure
+    get_tag_info = function(tag_node, throw)
         if
             not tag_node
             or not vim.tbl_contains(
@@ -519,7 +559,7 @@ module.public = {
             if vim.endswith(child:type(), "_carryover_set") then
                 for subchild in child:iter_children() do
                     if vim.endswith(subchild:type(), "_carryover") then
-                        local meta = module.public.get_tag_info(subchild)
+                        local meta = module.public.get_tag_info(subchild, throw)
 
                         table.insert(attributes, meta)
                     end
@@ -539,13 +579,17 @@ module.public = {
         for i, line in ipairs(content) do
             if i == 1 then
                 if content_start_column < start_column then
-                    log.error(
-                        string.format(
-                            "Unable to query information about tag on line %d: content is indented less than tag start!",
-                            start_row + 1
-                        )
+                    local error_msg = string.format(
+                        "Unable to query information about tag on line %d: content is indented less than tag start!",
+                        start_row + 1
                     )
-                    return nil
+
+                    if throw then
+                        error(error_msg)
+                    else
+                        log.error(error_msg)
+                        return nil
+                    end
                 end
                 content[i] = string.rep(" ", content_start_column - start_column) .. line
             else
@@ -566,7 +610,7 @@ module.public = {
     end,
     --- Gets the range of a given node
     ---@param node userdata #The node to get the range of
-    ---@return table #A table of `row_start`, `column_start`, `row_end` and `column_end` values
+    ---@return { row_start: number, column_start: number, row_end: number, column_end: number } range
     get_node_range = function(node)
         if not node then
             return {
@@ -639,7 +683,7 @@ module.public = {
     ---@param line number #The line number (0-indexed) to get the node from
     -- the same line as `line`.
     ---@param stop_type string|table? #Don't recurse to the provided type(s)
-    ---@return userdata|nil #The first node on `line`
+    ---@return TSNode|nil #The first node on `line`
     get_first_node_on_line = function(buf, line, stop_type)
         if type(stop_type) == "string" then
             stop_type = { stop_type }
@@ -679,7 +723,7 @@ module.public = {
 
     ---get document's metadata
     ---@param source number | string | PathlibPath
-    ---@param no_trim boolean
+    ---@param no_trim boolean?
     ---@return table?
     get_document_metadata = function(source, no_trim)
         source = source or 0
@@ -916,17 +960,7 @@ local function install_norg_ts()
 end
 
 module.on_event = function(event)
-    if event.split_type[1] == "core.keybinds" then
-        if event.split_type[2] == "core.integrations.treesitter.next.heading" then
-            module.public.goto_next_query_match(module.private.heading_query)
-        elseif event.split_type[2] == "core.integrations.treesitter.previous.heading" then
-            module.public.goto_previous_query_match(module.private.heading_query)
-        elseif event.split_type[2] == "core.integrations.treesitter.next.link" then
-            module.public.goto_next_query_match(module.private.link_query)
-        elseif event.split_type[2] == "core.integrations.treesitter.previous.link" then
-            module.public.goto_previous_query_match(module.private.link_query)
-        end
-    elseif event.split_type[2] == "sync-parsers" then
+    if event.split_type[2] == "sync-parsers" then
         local ok, err = pcall(install_norg_ts)
 
         if not ok then
@@ -939,12 +973,6 @@ module.on_event = function(event)
 end
 
 module.events.subscribed = {
-    ["core.keybinds"] = {
-        ["core.integrations.treesitter.next.heading"] = true,
-        ["core.integrations.treesitter.previous.heading"] = true,
-        ["core.integrations.treesitter.next.link"] = true,
-        ["core.integrations.treesitter.previous.link"] = true,
-    },
     ["core.neorgcmd"] = {
         ["sync-parsers"] = true,
     },

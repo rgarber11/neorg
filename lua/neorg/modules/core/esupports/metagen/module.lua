@@ -145,6 +145,24 @@ module.config.public = {
     delimiter = ": ",
 
     -- Custom template to use for generating content inside `@document.meta` tag
+    -- The template is a list of lists, each defining a key-value pair of metadata
+    --
+    -- Example:
+    -- ```
+    -- template = {
+    --   -- Default field name without a value will fall back to the default behavior
+    --   { "title" },
+    --   -- Set a custom value for "authors" field
+    --   { "authors", "Vhyrro" },
+    --   -- Fields can be set by lua functions
+    --   {
+    --     "categories",
+    --     function()
+    --       return {"Category-1", "Category-2"}
+    --     end
+    --   }
+    -- }
+    -- ```
     template = default_template,
 
     -- Custom author name that overrides default value if not nil or empty
@@ -163,22 +181,16 @@ module.config.public = {
     -- users with an autosave plugin, this option must be paired with keybinds for undo/redo to
     -- avoid problems with undo tree branching:
     -- ```lua
-    -- ["core.keybinds"] = {
-    --   config = {
-    --     hook = function(keybinds)
-    --       keybinds.map("norg", "n", "u", function()
-    --         require("neorg.modules.core.esupports.metagen.module").public.skip_next_update()
-    --         local k = vim.api.nvim_replace_termcodes("u<c-o>", true, false, true)
-    --         vim.api.nvim_feedkeys(k, 'n', false)
-    --       end)
-    --       keybinds.map("norg", "n", "<c-r>", function()
-    --         require("neorg.modules.core.esupports.metagen.module").public.skip_next_update()
-    --         local k = vim.api.nvim_replace_termcodes("<c-r><c-o>", true, false, true)
-    --         vim.api.nvim_feedkeys(k, 'n', false)
-    --       end)
-    --     end,
-    --   },
-    -- },
+    -- vim.keymap.set("n", "u", function()
+    --     require("neorg.modules").get_module("core.esupports.metagen").skip_next_update()
+    --     local k = vim.api.nvim_replace_termcodes("u<c-o>", true, false, true)
+    --     vim.api.nvim_feedkeys(k, 'n', false)
+    -- end)
+    -- vim.keymap.set("n", "<C-r>", function()
+    --     require("neorg.modules").get_module("core.esupports.metagen").skip_next_update()
+    --     local k = vim.api.nvim_replace_termcodes("<c-r><c-o>", true, false, true)
+    --     vim.api.nvim_feedkeys(k, 'n', false)
+    -- end)
     -- ```
     undojoin_updates = false,
 }
@@ -275,10 +287,13 @@ module.public = {
                 -- override with data from metadata table
                 data = { data[1], metadata[data[1]] }
             end
-            table.insert(
-                result,
-                whitespace .. data[1] .. delimiter .. tostring(type(data[2]) == "function" and data[2]() or data[2])
-            )
+            local lines = whitespace
+                .. data[1]
+                .. delimiter
+                .. tostring(type(data[2]) == "function" and data[2]() or data[2])
+            for _, line in ipairs(vim.split(lines, "\n")) do
+                table.insert(result, line)
+            end
         end
 
         table.insert(result, "@end")

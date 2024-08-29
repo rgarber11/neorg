@@ -7,7 +7,7 @@ local version = vim.version() -- TODO: Move to a more local scope
 --- A version agnostic way to call the neovim treesitter query parser
 --- @param language string # Language to use for the query
 --- @param query_string string # Query in s-expr syntax
---- @return table # Parsed query
+--- @return vim.treesitter.Query # Parsed query
 function utils.ts_parse_query(language, query_string)
     if vim.treesitter.query.parse then
         return vim.treesitter.query.parse(language, query_string)
@@ -202,23 +202,16 @@ function utils.set_operatorfunc(f)
     vim.go.operatorfunc = "v:lua.require'neorg'.utils._neorg_operatorfunc"
 end
 
-function utils.wrap_dotrepeat(event_handler)
-    return function(event)
+function utils.wrap_dotrepeat(callback)
+    return function(...)
         if vim.api.nvim_get_mode().mode == "i" then
-            event_handler(event)
+            callback(...)
             return
         end
 
-        utils._neorg_is_dotrepeat = false
+        local args = { ... }
         utils.set_operatorfunc(function()
-            if utils._neorg_is_dotrepeat then
-                local pos = assert(vim.fn.getpos("."))
-
-                event.buffer = pos[1]
-                event.cursor_position = { pos[2], pos[3] }
-            end
-            utils._neorg_is_dotrepeat = true
-            event_handler(event)
+            callback(unpack(args))
         end)
         vim.cmd("normal! g@l")
     end

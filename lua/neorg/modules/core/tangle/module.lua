@@ -13,8 +13,10 @@ The `tangle` module currently provides a single command:
 - `:Neorg tangle current-file` - performs all possible tangling operations on the current file
 
 ### Usage Tutorial
-By default, *zero* code blocks are tangled. You must provide where you'd like to tangle each code block manually (global configuration will be discussed later).
-To do so, add a `#tangle <output-file>` tag above the code block you'd wish to export. For example:
+By default, *zero* code blocks are tangled. You must provide where you'd like to tangle each code
+block manually (global configuration will be discussed later). To do so, add a `#tangle
+<output-file>` tag above the code block you'd wish to export, where <output-file> is relative to the
+current file. For example:
 
 ```norg
 #tangle init.lua
@@ -160,9 +162,10 @@ The first code block will be tangled to `./output.lua`, the second code block wi
 --]]
 
 local neorg = require("neorg.core")
-local lib, modules, utils = neorg.lib, neorg.modules, neorg.utils
+local lib, modules, utils, log = neorg.lib, neorg.modules, neorg.utils, neorg.log
 
 local module = modules.create("core.tangle")
+local Path = require("pathlib")
 
 module.setup = function()
     return {
@@ -193,6 +196,16 @@ module.load = function()
             },
         })
     end)
+
+    if module.config.public.tangle_on_write then
+        local augroup = vim.api.nvim_create_augroup("norg_auto_tangle", { clear = true })
+        vim.api.nvim_create_autocmd("BufWritePost", {
+            desc = "Tangle the current file on write",
+            pattern = "*.norg",
+            group = augroup,
+            command = "Neorg tangle current-file",
+        })
+    end
 end
 
 local function get_comment_string(language)
@@ -206,8 +219,10 @@ local function get_comment_string(language)
     return commentstring
 end
 
+---@class core.tangle
 module.public = {
     tangle = function(buffer)
+        ---@type core.integrations.treesitter
         local treesitter = module.required["core.integrations.treesitter"]
         local parsed_document_metadata = treesitter.get_document_metadata(buffer) or {}
         local tangle_settings = parsed_document_metadata.tangle or {}
@@ -262,12 +277,21 @@ module.public = {
         local previous_headings = {}
         local commentstrings = {}
         local file_content_line_start = {}
+        local buf_name = vim.api.nvim_buf_get_name(buffer)
 
         for id, node in query:iter_captures(document_root, buffer, 0, -1) do
             local capture = query.captures[id]
 
             if capture == "tag" then
-                local parsed_tag = treesitter.get_tag_info(node)
+                local ok, parsed_tag = pcall(treesitter.get_tag_info, node, true)
+                if not ok then
+                    if module.config.public.indent_errors == "print" then
+                        print(parsed_tag)
+                    else
+                        log.error(parsed_tag)
+                    end
+                    goto skip_tag
+                end
 
                 if parsed_tag then
                     local declared_filetype = parsed_tag.parameters[1]
@@ -319,6 +343,12 @@ module.public = {
                     end
                     if not file_to_tangle_to then
                         goto skip_tag
+                    end
+
+                    local path_lib_path = Path.new(file_to_tangle_to)
+                    if path_lib_path:is_relative() then
+                        local buf_path = Path.new(buf_name)
+                        file_to_tangle_to = tostring(buf_path:parent():child(file_to_tangle_to):resolve())
                     end
 
                     local delimiter_content
@@ -395,10 +425,9 @@ module.public = {
                         vim.list_extend(tangles[file_to_tangle_to], delimiter_content)
                     end
                     vim.list_extend(tangles[file_to_tangle_to], block_content)
-
-                    ::skip_tag::
                 end
             end
+            ::skip_tag::
         end
 
         if options.delimiter == "file-content" then
@@ -421,6 +450,16 @@ module.public = {
 module.config.public = {
     -- Notify when there is nothing to tangle (INFO) or when the content is empty (WARN).
     report_on_empty = true,
+
+    -- Tangle all code blocks in the current norg file on file write.
+    tangle_on_write = false,
+
+    -- When text in a code block is less indented than the block itself, Neorg will not tangle that
+    -- block to a file. Instead it can either print or vim.notify error. By default, vim.notify is
+    -- loud and is more likely to create a press enter message.
+    -- - "notify" - Throw a normal looking error
+    -- - "print" - print the error
+    indent_errors = "notify",
 }
 
 module.on_event = function(event)

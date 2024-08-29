@@ -28,7 +28,6 @@ module.setup = function()
             "core.queries.native",
             "core.integrations.treesitter",
             "core.ui",
-            "core.mode",
         },
     }
 end
@@ -49,9 +48,9 @@ module.load = function()
         return
     end
 
-    modules.await("core.keybinds", function(keybinds)
-        keybinds.register_keybinds(module.name, { "next_page", "previous_page", "close" })
-    end)
+    vim.keymap.set("", "<Plug>(neorg.presenter.next-page)", module.public.next_page)
+    vim.keymap.set("", "<Plug>(neorg.presenter.previous-page)", module.public.previous_page)
+    vim.keymap.set("", "<Plug>(neorg.presenter.close)", module.public.close)
 
     modules.await("core.neorgcmd", function(neorgcmd)
         neorgcmd.add_commands_from_table({
@@ -171,7 +170,6 @@ module.public = {
 
         api.nvim_buf_set_option(buffer, "modifiable", false)
 
-        module.required["core.mode"].set_mode("presenter")
         module.private.buf = buffer
         module.private.data = results
     end,
@@ -220,10 +218,6 @@ module.public = {
             return
         end
 
-        -- Go back to previous mode
-        local previous_mode = module.required["core.mode"].get_previous_mode()
-        module.required["core.mode"].set_mode(previous_mode)
-
         if module.config.public.zen_mode == "truezen" and modules.is_module_loaded("core.integrations.truezen") then
             modules.get_module("core.integrations.truezen").toggle_ataraxis()
         elseif
@@ -241,15 +235,9 @@ module.public = {
 }
 
 module.on_event = function(event)
-    if vim.tbl_contains({ "core.neorgcmd", "core.keybinds" }, event.split_type[1]) then
-        if vim.tbl_contains({ "presenter.start" }, event.split_type[2]) then
+    if event.split_type[1] == "core.neorgcmd" then
+        if event.split_type[2] == "presenter.start" then
             module.public.present()
-        elseif vim.tbl_contains({ "presenter.close", "core.presenter.close" }, event.split_type[2]) then
-            module.public.close()
-        elseif vim.tbl_contains({ "core.presenter.previous_page" }, event.split_type[2]) then
-            module.public.previous_page()
-        elseif vim.tbl_contains({ "core.presenter.next_page" }, event.split_type[2]) then
-            module.public.next_page()
         end
     end
 end
@@ -258,11 +246,6 @@ module.events.subscribed = {
     ["core.neorgcmd"] = {
         ["presenter.start"] = true,
         ["presenter.close"] = true,
-    },
-    ["core.keybinds"] = {
-        ["core.presenter.previous_page"] = true,
-        ["core.presenter.next_page"] = true,
-        ["core.presenter.close"] = true,
     },
 }
 

@@ -4,16 +4,12 @@
     summary: A Neorg module for moving and selecting elements of the document.
     ---
 
-**WARNING:** Requires nvim 0.10+
-
 - Easily move items up and down in the document
 - Provides text objects for headings, tags, and lists
 
 ## Usage
 
 Users can create keybinds for some or all of the different events this module exposes. Those are:
-
-those events are:
 
 - `core.text-objects.item_up` - Moves the current "item" up
 - `core.text-objects.item_down` - same but down
@@ -30,59 +26,56 @@ _Movable "items" include headings, and list items (ordered/unordered/todo)_
 Example keybinds that would go in your Neorg configuration:
 
 ```lua
-["core.keybinds"] = {
-    config = {
-        hook = function(keybinds)
-            -- Binds to move items up or down
-            keybinds.remap_event("norg", "n", "<up>", "core.text-objects.item_up")
-            keybinds.remap_event("norg", "n", "<down>", "core.text-objects.item_down")
-
-            -- text objects, these binds are available as `vaH` to "visual select around a header" or
-            -- `diH` to "delete inside a header"
-            keybinds.remap_event("norg", { "o", "x" }, "iH", "core.text-objects.textobject.heading.inner")
-            keybinds.remap_event("norg", { "o", "x" }, "aH", "core.text-objects.textobject.heading.outer")
-        end,
-    },
-},
+vim.keymap.set("n", "<up>", "<Plug>(neorg.text-objects.item-up)", {})
+vim.keymap.set("n", "<down>", "<Plug>(neorg.text-objects.item-down)", {})
+vim.keymap.set({ "o", "x" }, "iH", "<Plug>(neorg.text-objects.textobject.heading.inner)", {})
+vim.keymap.set({ "o", "x" }, "aH", "<Plug>(neorg.text-objects.textobject.heading.outer)", {})
 ```
 
 --]]
 
 local neorg = require("neorg.core")
-local utils, log, modules = neorg.utils, neorg.log, neorg.modules
+local log, modules, lib = neorg.log, neorg.modules, neorg.lib
 local ts
 
 local module = modules.create("core.text-objects")
 
 module.setup = function()
-    if not utils.is_minimum_version(0, 10, 0) then
-        log.error("This module requires at least Neovim 0.10 to run!")
-
-        return {
-            success = false,
-        }
-    end
-
     return {
         success = true,
-        requires = { "core.keybinds", "core.integrations.treesitter" },
+        requires = { "core.integrations.treesitter" },
     }
 end
 
--- TODO: what's a better name for this?
-local tags = {
-    "item_up",
-    "item_down",
-    "textobject.heading.outer",
-    "textobject.heading.inner",
-    "textobject.tag.inner",
-    "textobject.tag.outer",
-    "textobject.list.outer",
-}
-
 module.load = function()
-    module.required["core.keybinds"].register_keybinds(module.name, tags)
     ts = module.required["core.integrations.treesitter"]
+    vim.keymap.set("", "<Plug>(neorg.text-objects.item-up)", module.public.move_up)
+    vim.keymap.set("", "<Plug>(neorg.text-objects.item-down)", module.public.move_down)
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.text-objects.textobject.heading.outer)",
+        lib.wrap(module.public.highlight_node, "heading.outer")
+    )
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.text-objects.textobject.heading.inner)",
+        lib.wrap(module.public.highlight_node, "heading.inner")
+    )
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.text-objects.textobject.tag.inner)",
+        lib.wrap(module.public.highlight_node, "tag.inner")
+    )
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.text-objects.textobject.tag.outer)",
+        lib.wrap(module.public.highlight_node, "tag.outer")
+    )
+    vim.keymap.set(
+        "",
+        "<Plug>(neorg.text-objects.textobject.list.outer)",
+        lib.wrap(module.public.highlight_node, "lits.outer")
+    )
 end
 
 module.config.public = {
@@ -108,8 +101,7 @@ module.config.public = {
     },
 }
 
----@class core.text-objects
-module.public = {
+module.private = {
     get_element_from_cursor = function(node_pattern)
         local node_at_cursor = vim.treesitter.get_node()
 
@@ -126,7 +118,7 @@ module.public = {
     end,
 
     move_item_down = function(pattern, expected_sibling_name, buffer)
-        local element = module.public.get_element_from_cursor(pattern)
+        local element = module.private.get_element_from_cursor(pattern)
 
         if not element then
             return
@@ -149,7 +141,7 @@ module.public = {
     end,
 
     move_item_up = function(pattern, expected_sibling_name, buffer)
-        local element = module.public.get_element_from_cursor(pattern)
+        local element = module.private.get_element_from_cursor(pattern)
 
         if not element then
             return
@@ -168,6 +160,35 @@ module.public = {
                     return
                 end
             end
+        end
+    end,
+}
+
+---@class core.text-objects
+module.public = {
+    move_up = function()
+        local config = module.config.public.moveables
+        local buffer = vim.api.nvim_get_current_buf()
+
+        for _, data in pairs(config) do
+            module.private.move_item_up(data[1], data[2], buffer)
+        end
+    end,
+
+    move_down = function()
+        local config = module.config.public.moveables
+        local buffer = vim.api.nvim_get_current_buf()
+
+        for _, data in pairs(config) do
+            module.private.move_item_down(data[1], data[2], buffer)
+        end
+    end,
+
+    highlight_node = function(name)
+        local textobj_lookup = module.config.private.textobjects[name]
+
+        if textobj_lookup then
+            return textobj_lookup(vim.treesitter.get_node())
         end
     end,
 }
@@ -202,10 +223,26 @@ local function highlight_node(node)
     end
 
     local range = module.required["core.integrations.treesitter"].get_node_range(node)
+    if range.column_end == 0 then
+        range.row_end = range.row_end - 1
+        range.column_end = vim.api.nvim_buf_get_lines(0, range.row_end, range.row_end + 1, true)[1]:len()
+    end
+    if range.column_start == vim.api.nvim_buf_get_lines(0, range.row_start, range.row_start + 1, true)[1]:len() then
+        range.row_start = range.row_start + 1
+        range.column_start = 0
+    end
 
-    vim.api.nvim_buf_set_mark(0, "<", range.row_start + 1, range.column_start, {})
-    vim.api.nvim_buf_set_mark(0, ">", range.row_end + 1, range.column_end, {})
-    vim.cmd("normal! gv")
+    -- This method of selection is from ts_utils, it avoids a bug with the nvim_buf_set_mark
+    -- approach
+    local selection_mode = "v"
+    local mode = vim.api.nvim_get_mode()
+    if mode.mode ~= selection_mode then
+        vim.cmd.normal({ selection_mode, bang = true })
+    end
+
+    vim.api.nvim_win_set_cursor(0, { range.row_start + 1, range.column_start })
+    vim.cmd.normal({ bang = true, args = { "o" } })
+    vim.api.nvim_win_set_cursor(0, { range.row_end + 1, range.column_end })
 end
 
 module.config.private = {
@@ -228,37 +265,5 @@ module.config.private = {
         end,
     },
 }
-
----Handle events
----@param event neorg.event
-module.on_event = function(event)
-    local config = module.config.public.moveables
-
-    if event.split_type[2] == "core.text-objects.item_down" then
-        for _, data in pairs(config) do
-            module.public.move_item_down(data[1], data[2], event.buffer)
-        end
-    elseif event.split_type[2] == "core.text-objects.item_up" then
-        for _, data in pairs(config) do
-            module.public.move_item_up(data[1], data[2], event.buffer)
-        end
-    else
-        local textobj = event.split_type[2]:find("textobject")
-
-        if textobj then
-            local textobject_type = event.split_type[2]:sub(textobj + string.len("textobject") + 1)
-            local textobj_lookup = module.config.private.textobjects[textobject_type]
-
-            if textobj_lookup then
-                return textobj_lookup(vim.treesitter.get_node())
-            end
-        end
-    end
-end
-
-module.events.subscribed = { ["core.keybinds"] = {} }
-for _, name in ipairs(tags) do
-    module.events.subscribed["core.keybinds"][("%s.%s"):format(module.name, name)] = true
-end
 
 return module

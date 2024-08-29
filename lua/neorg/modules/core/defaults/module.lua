@@ -38,7 +38,6 @@ return modules.create_meta(
     "core.journal",
     "core.keybinds",
     "core.looking-glass",
-    "core.mode",
     "core.neorgcmd",
     "core.pivot",
     "core.promo",
@@ -46,5 +45,7 @@ return modules.create_meta(
     "core.qol.todo_items",
     "core.storage",
     "core.tangle",
-    "core.todo-introspector"
+    "core.tempus",
+    "core.todo-introspector",
+    "core.ui.calendar"
 )

@@ -1,10 +1,9 @@
 return {
     check = function()
         local config = require("neorg.core").config.user_config
-        local modules = require("neorg.core").modules
+        local modules = require("neorg.core.modules")
 
-        vim.health.start("neorg")
-        vim.health.info("Checking configuration...")
+        vim.health.start("Neorg Configuration")
 
         if config.load == nil or vim.tbl_isempty(config.load) then
             vim.health.ok("Empty configuration provided: Neorg will load `core.defaults` by default.")
@@ -59,7 +58,7 @@ return {
                         )
                     )
                 else
-                    vim.health.ok(string.format("Module declaration `%s` is well-formed", key))
+                    vim.health.ok(string.format("Module declaration for `%s` is well-formed", key))
                 end
             end
 
@@ -69,34 +68,65 @@ return {
             end
         end
 
-        vim.health.info("Checking existence of dependencies...")
+        vim.health.start("Neorg Dependencies")
 
-        if pcall(require, "lazy") then
-            if not (pcall(require, "luarocks-nvim")) then
-                vim.health.error(
-                    "Required dependency `vhyrro/luarocks.nvim` not found! Neither `theHamsta/nvim_rocks` nor `camspiers/luarocks` are compatible. Check installation instructions in the README for how to fix the error."
-                )
+        if vim.fn.executable("luarocks") then
+            vim.health.ok("`luarocks` is installed.")
+        else
+            vim.health.error(
+                "`luarocks` not installed on your system! Please consult the Neorg README for installation instructions."
+            )
+        end
+
+        vim.health.start("Neorg Keybinds")
+
+        modules.load_module("core.keybinds")
+        local keybinds = modules.get_module("core.keybinds")
+        local keybinds_config = modules.get_module_config("core.keybinds")
+
+        if keybinds_config.default_keybinds then
+            local key_healthcheck = keybinds.health()
+
+            if key_healthcheck.preset_exists then
+                vim.health.info(string.format("Neorg is configured to use keybind preset `%s`", keybinds_config.preset))
             else
-                vim.health.ok("Required dependency `vhyrro/luarocks` found!")
-
-                vim.health.info("Checking existence of luarocks dependencies...")
-
-                local has_lua_utils = (pcall(require, "lua-utils"))
-
-                if not has_lua_utils then
-                    vim.health.error(
-                        "Critical dependency `lua-utils.nvim` not found! Please run `:Lazy build luarocks.nvim` and then `:Lazy build neorg`! Neorg will refuse to load."
+                vim.health.error(
+                    string.format(
+                        "Invalid configuration found: preset `%s` does not exist! Did you perhaps make a typo?",
+                        keybinds_config.preset
                     )
-                else
-                    vim.health.ok("Critical dependencies are installed. You are free to use Neorg!")
-                    vim.health.warn("If you ever encounter errors please rerun `:Lazy build neorg` again :)")
-                end
+                )
+                return
+            end
+
+            for remap_key, remap_rhs in vim.spairs(key_healthcheck.remaps) do
+                vim.health.ok(
+                    string.format(
+                        "Action `%s` (bound to `%s` by default) has been remapped to something else in your configuration.",
+                        remap_rhs,
+                        remap_key
+                    )
+                )
+            end
+
+            local ok = true
+
+            for conflict_key, rhs in vim.spairs(key_healthcheck.conflicts) do
+                vim.health.warn(
+                    string.format(
+                        "Key `%s` conflicts with a key bound by the user. Neorg will not bind this key.",
+                        conflict_key
+                    ),
+                    string.format("consider mapping `%s` to a different key than the one bound by Neorg.", rhs)
+                )
+                ok = false
+            end
+
+            if ok then
+                vim.health.ok("No keybind conflicts found.")
             end
         else
-            vim.health.ok("Using plugin manager other than lazy, no need for the `vhyrro/luarocks.nvim` dependency.")
-            vim.health.warn(
-                "If you are on an unsupported plugin manager you may still need the plugin for Neorg to function."
-            )
+            vim.health.ok("Neorg is not configured to set any default keybinds.")
         end
     end,
 }

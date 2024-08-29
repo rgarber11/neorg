@@ -414,6 +414,7 @@ module.config.private = {
     },
 }
 
+---@class core.journal
 module.public = {
     version = "0.0.9",
 }
@@ -449,7 +450,7 @@ module.load = function()
 end
 
 module.on_event = function(event)
-    if vim.tbl_contains({ "core.keybinds", "core.neorgcmd" }, event.split_type[1]) then
+    if event.split_type[1] == "core.neorgcmd" then
         if event.split_type[2] == "journal.tomorrow" then
             module.private.diary_tomorrow()
         elseif event.split_type[2] == "journal.yesterday" then

@@ -28,31 +28,27 @@ local neorg = require("neorg.core")
 local modules = neorg.modules
 
 local module = modules.create("core.promo")
+local indent
 
 module.setup = function()
     return {
         success = true,
         requires = {
             "core.integrations.treesitter",
+            "core.esupports.indent",
         },
     }
 end
 
 module.load = function()
-    modules.await("core.keybinds", function(keybinds)
-        keybinds.register_keybinds(
-            module.name,
-            (function()
-                local keys = vim.tbl_keys(module.events.subscribed["core.keybinds"])
-
-                for i, key in ipairs(keys) do
-                    keys[i] = key:sub(module.name:len() + 2)
-                end
-
-                return keys
-            end)()
-        )
-    end)
+    ---@type core.esupports.indent
+    indent = module.required["core.esupports.indent"]
+    vim.keymap.set({ "n", "i" }, "<Plug>(neorg.promo.promote)", module.public.promote)
+    vim.keymap.set({ "n", "i" }, "<Plug>(neorg.promo.promote.nested)", module.public.promote_nested)
+    vim.keymap.set({ "n", "i", "v" }, "<Plug>(neorg.promo.promote.range)", module.public.promote_range)
+    vim.keymap.set({ "n", "i" }, "<Plug>(neorg.promo.demote)", module.public.demote)
+    vim.keymap.set({ "n", "i" }, "<Plug>(neorg.promo.demote.nested)", module.public.demote_nested)
+    vim.keymap.set({ "n", "i", "v" }, "<Plug>(neorg.promo.demote.range)", module.public.demote_range)
 end
 
 module.private = {
@@ -79,10 +75,11 @@ module.private = {
         "generic_list",
         "quote",
     },
-}
 
----@class core.promo
-module.public = {
+    get_line = function(buffer, target_row)
+        return vim.api.nvim_buf_get_lines(buffer, target_row, target_row + 1, true)[1]
+    end,
+
     get_promotable_node_prefix = function(node)
         for _, data in pairs(module.private.types) do
             if node:type():match(data.pattern) then
@@ -92,32 +89,6 @@ module.public = {
     end,
 
     promote_or_demote = function(buffer, mode, row, reindent_children, affect_children)
-        -- Vim buffer helpers
-        local function count_leading_whitespace(s)
-            return s:match("^%s*"):len()
-        end
-
-        local function get_line(target_row)
-            return vim.api.nvim_buf_get_lines(buffer, target_row, target_row + 1, true)[1]
-        end
-
-        local function buffer_set_line_indent(start_row, new_indent)
-            local line = get_line(start_row)
-
-            if line:match("^%s*$") then
-                return
-            end
-
-            return vim.api.nvim_buf_set_text(
-                buffer,
-                start_row,
-                0,
-                start_row,
-                count_leading_whitespace(line),
-                { (" "):rep(new_indent) }
-            )
-        end
-
         -- Treesitter node helpers
         local function get_header_prefix_node(header_node)
             local first_child = header_node:child(0)
@@ -145,14 +116,14 @@ module.public = {
         end
 
         local function is_quasi_prefix(target_row)
-            local line = get_line(target_row)
+            local line = module.private.get_line(buffer, target_row)
             -- NOTE: This is a hardcoded check determined by the limitations of
             -- the first generation treesitter parser.
             return line:match("^%s*[%-~%*]+%s*$")
         end
 
         local function adjust_quasi_prefix(target_row, count)
-            local line = get_line(target_row)
+            local line = module.private.get_line(buffer, target_row)
             local l, r = line:find("%S+")
             assert(l)
             assert(count ~= 0)
@@ -179,7 +150,7 @@ module.public = {
             return
         end
 
-        local root_prefix_char = module.public.get_promotable_node_prefix(root_node)
+        local root_prefix_char = module.private.get_promotable_node_prefix(root_node)
         if not root_prefix_char then
             local n_space_diff = vim.bo.shiftwidth * action_count
             if mode == "demote" then
@@ -189,7 +160,7 @@ module.public = {
             local current_visual_indent = vim.fn.indent(row + 1)
             local new_indent = math.max(0, current_visual_indent + n_space_diff)
 
-            buffer_set_line_indent(row, new_indent)
+            indent.buffer_set_line_indent(buffer, row, new_indent)
             return
         end
 
@@ -269,7 +240,7 @@ module.public = {
         local apply_recursive = root_level < HEADING_VERYLOW_LEVEL and apply_recursive_normal or apply_recursive_verylow
 
         apply_recursive(root_node, function(node)
-            return module.public.get_promotable_node_prefix(node) == root_prefix_char
+            return module.private.get_promotable_node_prefix(node) == root_prefix_char
         end, function(node)
             indent_targets[#indent_targets + 1] = node
         end)
@@ -288,81 +259,56 @@ module.public = {
             return
         end
 
-        local indent_module = modules.get_module("core.esupports.indent")
-        if not indent_module then
-            return
-        end
-
-        local function reindent_range(row_start, row_end)
-            for i = row_start, row_end - 1 do
-                local indent_level = indent_module.indentexpr(buffer, i)
-                buffer_set_line_indent(i, indent_level)
-            end
-        end
-
-        reindent_range(indent_row_start, indent_row_end)
+        indent.reindent_range(buffer, indent_row_start, indent_row_end)
     end,
 }
 
-module.on_event = neorg.utils.wrap_dotrepeat(function(event)
-    local row = event.cursor_position[1] - 1
+---@class core.promo
+module.public = {
+    promote = neorg.utils.wrap_dotrepeat(function()
+        local buffer = vim.api.nvim_get_current_buf()
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
 
-    if event.split_type[1] ~= "core.keybinds" then
-        return
-    end
+        module.private.promote_or_demote(buffer, "promote", row, true, false)
+    end),
+    promote_nested = neorg.utils.wrap_dotrepeat(function()
+        local buffer = vim.api.nvim_get_current_buf()
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
 
-    if event.split_type[2] == "core.promo.promote" then
-        module.public.promote_or_demote(event.buffer, "promote", row, true, event.content[1] == "nested")
-    elseif event.split_type[2] == "core.promo.demote" then
-        module.public.promote_or_demote(event.buffer, "demote", row, true, event.content[1] == "nested")
-    elseif event.split_type[2] == "core.promo.promote_range" then
-        local start_pos = vim.api.nvim_buf_get_mark(event.buffer, "<")
-        local end_pos = vim.api.nvim_buf_get_mark(event.buffer, ">")
+        module.private.promote_or_demote(buffer, "promote", row, true, true)
+    end),
+    promote_range = neorg.utils.wrap_dotrepeat(function()
+        local buffer = vim.api.nvim_get_current_buf()
+        local start_pos = vim.api.nvim_buf_get_mark(buffer, "<")
+        local end_pos = vim.api.nvim_buf_get_mark(buffer, ">")
 
-        for i = 0, end_pos[1] - start_pos[1] do
-            module.public.promote_or_demote(event.buffer, "promote", start_pos[1] + i)
+        for i = start_pos[1], end_pos[1] do
+            module.private.promote_or_demote(buffer, "promote", i - 1, false, false)
         end
+        indent.reindent_range(buffer, start_pos[1], end_pos[1])
+    end),
+    demote = neorg.utils.wrap_dotrepeat(function()
+        local buffer = vim.api.nvim_get_current_buf()
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
 
-        if modules.loaded_modules["core.concealer"] then
-            modules.broadcast_event(
-                assert(
-                    modules.create_event(
-                        modules.loaded_modules["core.concealer"],
-                        "core.concealer.events.update_region",
-                        { start = start_pos[1] - 1, ["end"] = end_pos[1] + 2 }
-                    )
-                )
-            )
+        module.private.promote_or_demote(buffer, "demote", row, true, false)
+    end),
+    demote_nested = neorg.utils.wrap_dotrepeat(function()
+        local buffer = vim.api.nvim_get_current_buf()
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+
+        module.private.promote_or_demote(buffer, "demote", row, true, true)
+    end),
+    demote_range = neorg.utils.wrap_dotrepeat(function()
+        local buffer = vim.api.nvim_get_current_buf()
+        local start_pos = vim.api.nvim_buf_get_mark(buffer, "<")
+        local end_pos = vim.api.nvim_buf_get_mark(buffer, ">")
+
+        for i = start_pos[1], end_pos[1] do
+            module.private.promote_or_demote(buffer, "demote", i - 1, false, false)
         end
-    elseif event.split_type[2] == "core.promo.demote_range" then
-        local start_pos = vim.api.nvim_buf_get_mark(event.buffer, "<")
-        local end_pos = vim.api.nvim_buf_get_mark(event.buffer, ">")
-
-        for i = 0, end_pos[1] - start_pos[1] do
-            module.public.promote_or_demote(event.buffer, "demote", start_pos[1] + i)
-        end
-
-        if modules.loaded_modules["core.concealer"] then
-            modules.broadcast_event(
-                assert(
-                    modules.create_event(
-                        modules.loaded_modules["core.concealer"],
-                        "core.concealer.events.update_region",
-                        { start = start_pos[1] - 1, ["end"] = end_pos[1] + 2 }
-                    )
-                )
-            )
-        end
-    end
-end)
-
-module.events.subscribed = {
-    ["core.keybinds"] = {
-        ["core.promo.promote"] = true,
-        ["core.promo.demote"] = true,
-        ["core.promo.promote_range"] = true,
-        ["core.promo.demote_range"] = true,
-    },
+        indent.reindent_range(buffer, start_pos[1], end_pos[1])
+    end),
 }
 
 return module

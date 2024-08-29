@@ -10,7 +10,11 @@ command: `:Neorg render-latex`. Rendering can be disabled with `:Neorg render-la
 
 Requires:
 - The [image.nvim](https://github.com/3rd/image.nvim) neovim plugin.
-- `latex` executable in path
+- `latex` executable in path with the following packages:
+  - standalone
+  - amsmath
+  - amssymb
+  - graphicx
 - `dvipng` executable in path (normally comes with LaTeX)
 
 There's a highlight group that controls the foreground color of the rendered latex:
@@ -20,8 +24,6 @@ local nio
 local neorg = require("neorg.core")
 local module = neorg.modules.create("core.latex.renderer")
 local modules = neorg.modules
-
-assert(vim.re ~= nil, "Neovim 0.10.0+ is required to run the `core.renderer.latex` module!")
 
 module.setup = function()
     return {
@@ -152,6 +154,7 @@ module.private.get_key = function(range)
     return ("%d:%d"):format(range[1], range[2])
 end
 
+---@class core.latex.renderer
 module.public = {
     ---@async
     ---@param buf number

@@ -21,7 +21,7 @@ make it look like this module isn't working.
 -- utils  to be refactored
 
 local neorg = require("neorg.core")
-local lib, log, modules, utils = neorg.lib, neorg.log, neorg.modules, neorg.utils
+local log, modules, utils = neorg.log, neorg.modules, neorg.utils
 
 local function in_range(k, l, r_ex)
     return l <= k and k < r_ex
@@ -64,26 +64,6 @@ local function get_line_length(bufid, row_0b)
 end
 
 --- end utils
-
---- TODO: Migrate to `vim.version` when `0.10.0` becomes stable
-local has_anticonceal = (function()
-    if not utils.is_minimum_version(0, 10, 0) then
-        return false
-    end
-
-    if utils.is_minimum_version(0, 10, 1) then
-        return true
-    end
-
-    local full_version = vim.api.nvim_cmd({ cmd = "version" }, { output = true })
-    local _, _, sub_version = string.find(full_version, "-(%d+)[+]")
-    if not sub_version then
-        return true
-    end -- no longer a dev version
-    sub_version = tonumber(sub_version)
-    return sub_version and sub_version > 575
-end)()
-local has_extmark_invalidation = utils.is_minimum_version(0, 10, 0)
 
 local module = modules.create("core.concealer", {
     "preset_basic",
@@ -138,11 +118,8 @@ local function set_mark(bufid, row_0b, col_0b, text, highlight, ext_opts)
         cursorline_hl_group = nil,
         spell = nil,
         ui_watched = nil,
+        invalidate = true,
     }
-
-    if has_extmark_invalidation then
-        opt["invalidate"] = true
-    end
 
     if ext_opts then
         table_extend_in_place(opt, ext_opts)
@@ -461,42 +438,6 @@ local superscript_digits = {
 
 ---@class core.concealer
 module.public = {
-    foldtext = function()
-        local foldstart = vim.v.foldstart
-        local line = vim.api.nvim_buf_get_lines(0, foldstart - 1, foldstart, true)[1]
-
-        return lib.match(line, function(lhs, rhs)
-            return vim.startswith(lhs, rhs)
-        end)({
-            ["@document.meta"] = "Document Metadata",
-            _ = function()
-                local line_length = vim.api.nvim_strwidth(line)
-
-                local icon_extmarks = vim.api.nvim_buf_get_extmarks(
-                    0,
-                    module.private.ns_icon,
-                    { foldstart - 1, 0 },
-                    { foldstart - 1, line_length },
-                    {
-                        details = true,
-                    }
-                )
-
-                for _, extmark in ipairs(icon_extmarks) do
-                    local extmark_details = extmark[4]
-
-                    for _, virt_text in ipairs(extmark_details.virt_text or {}) do
-                        line = vim.fn.strcharpart(line, 0, extmark[3])
-                            .. virt_text[1]
-                            .. vim.fn.strcharpart(line, extmark[3] + vim.api.nvim_strwidth(virt_text[1]))
-                    end
-                end
-
-                return line
-            end,
-        })
-    end,
-
     icon_renderers = {
         on_left = function(config, bufid, node)
             if not config.icon then
@@ -526,16 +467,11 @@ module.public = {
                 end
 
                 local text = (" "):rep(len - 1) .. icon
-                if vim.fn.strcharlen(text) > len and not has_anticonceal then
-                    -- TODO warn neovim version
-                    return
-                end
 
                 local _, first_unicode_end = text:find("[%z\1-\127\194-\244][\128-\191]*", len)
                 local highlight = config.highlights and table_get_default_last(config.highlights, len)
                 set_mark(bufid, row_0b, col_0b, text:sub(1, first_unicode_end), highlight)
                 if vim.fn.strcharlen(text) > len then
-                    assert(has_anticonceal)
                     set_mark(bufid, row_0b, col_0b + len, text:sub(first_unicode_end + 1), highlight, {
                         virt_text_pos = "inline",
                     })
@@ -559,22 +495,43 @@ module.public = {
             end
         end,
 
-        multilevel_copied = function(config, bufid, node)
+        ---@param node TSNode
+        quote_concealed = function(config, bufid, node)
             if not config.icons then
                 return
             end
-            local row_0b, col_0b, len = get_node_position_and_text_length(bufid, node)
+
+            local prefix = node:named_child(0)
+
+            local row_0b, col_0b, len = get_node_position_and_text_length(bufid, prefix)
+
             local last_icon, last_highlight
-            for i = 1, len do
-                if config.icons[i] ~= nil then
-                    last_icon = config.icons[i]
+
+            for _, child in ipairs(node:field("content")) do
+                local row_last_0b, col_last_0b = child:end_()
+
+                -- Sometimes the parser overshoots to the next newline, breaking
+                -- the range.
+                -- To counteract this we correct the overshoot.
+                if col_last_0b == 0 then
+                    row_last_0b = row_last_0b - 1
                 end
-                if not last_icon then
-                    goto continue
+
+                for line = row_0b, row_last_0b do
+                    if get_line_length(bufid, line) > len then
+                        for col = 1, len do
+                            if config.icons[col] ~= nil then
+                                last_icon = config.icons[col]
+                            end
+                            if not last_icon then
+                                goto continue
+                            end
+                            last_highlight = config.highlights[col] or last_highlight
+                            set_mark(bufid, line, col_0b + (col - 1), last_icon, last_highlight)
+                            ::continue::
+                        end
+                    end
                 end
-                last_highlight = config.highlights[i] or last_highlight
-                set_mark(bufid, row_0b, col_0b + (i - 1), last_icon, last_highlight)
-                ::continue::
             end
         end,
 
@@ -688,6 +645,22 @@ module.public = {
             end
         end,
     },
+
+    icon_removers = {
+        quote = function(_, bufid, node)
+            for _, content in ipairs(node:field("content")) do
+                local end_row, end_col = content:end_()
+
+                -- This counteracts the issue where a quote can span onto the next
+                -- line, even though it shouldn't.
+                if end_col == 0 then
+                    end_row = end_row - 1
+                end
+
+                vim.api.nvim_buf_clear_namespace(bufid, module.private.ns_icon, (content:start()), end_row + 1)
+            end
+        end,
+    },
 }
 
 module.config.public = {
@@ -780,8 +753,7 @@ module.config.public = {
             render = module.public.icon_renderers.multilevel_on_right(false),
         },
         ordered = {
-            icons = has_anticonceal and { "1.", "A.", "a.", "(1)", "I.", "i." }
-                or { "⒈", "A", "a", "⑴", "Ⓐ", "ⓐ" },
+            icons = { "1.", "A.", "a.", "(1)", "I.", "i." },
             nodes = {
                 "ordered_list1_prefix",
                 "ordered_list2_prefix",
@@ -795,12 +767,12 @@ module.config.public = {
         quote = {
             icons = { "│" },
             nodes = {
-                "quote1_prefix",
-                "quote2_prefix",
-                "quote3_prefix",
-                "quote4_prefix",
-                "quote5_prefix",
-                "quote6_prefix",
+                "quote1",
+                "quote2",
+                "quote3",
+                "quote4",
+                "quote5",
+                "quote6",
             },
             highlights = {
                 "@neorg.quotes.1.prefix",
@@ -810,7 +782,8 @@ module.config.public = {
                 "@neorg.quotes.5.prefix",
                 "@neorg.quotes.6.prefix",
             },
-            render = module.public.icon_renderers.multilevel_copied,
+            render = module.public.icon_renderers.quote_concealed,
+            clear = module.public.icon_removers.quote,
         },
         heading = {
             icons = { "◉", "◎", "○", "✺", "▶", "⤷" },
@@ -993,15 +966,16 @@ local function remove_extmarks(bufid, pos_start_0b_0b, pos_end_0bin_0bex)
         )
     do
         local extmark_id = result[1]
-        local node_pos_0b_0b = { x = result[2], y = result[3] }
-        assert(
-            pos_le(pos_start_0b_0b, node_pos_0b_0b) and pos_le(node_pos_0b_0b, pos_end_0bin_0bex),
-            ("start=%s, end=%s, node=%s"):format(
-                vim.inspect(pos_start_0b_0b),
-                vim.inspect(pos_end_0bin_0bex),
-                vim.inspect(node_pos_0b_0b)
-            )
-        )
+        -- TODO: Optimize
+        -- local node_pos_0b_0b = { x = result[2], y = result[3] }
+        -- assert(
+        --     pos_le(pos_start_0b_0b, node_pos_0b_0b) and pos_le(node_pos_0b_0b, pos_end_0bin_0bex),
+        --     ("start=%s, end=%s, node=%s"):format(
+        --         vim.inspect(pos_start_0b_0b),
+        --         vim.inspect(pos_end_0bin_0bex),
+        --         vim.inspect(node_pos_0b_0b)
+        --     )
+        -- )
         vim.api.nvim_buf_del_extmark(bufid, ns_icon, extmark_id)
     end
 end
@@ -1148,18 +1122,6 @@ local function prettify_range(bufid, row_start_0b, row_end_0bex)
     local nodes, concealed_node_ids =
         query_get_nodes(get_parsed_query_lazy(), document_root, bufid, row_start_0b, row_end_0bex)
 
-    local pos_start_0b_0b = { x = row_start_0b, y = 0 }
-    local pos_end_0bin_0bex = { x = row_end_0bex - 1, y = get_line_length(bufid, row_end_0bex - 1) }
-
-    for i = 1, #nodes do
-        check_min(pos_start_0b_0b, nodes[i]:start())
-        check_max(pos_end_0bin_0bex, nodes[i]:end_())
-    end
-
-    remove_extmarks(bufid, pos_start_0b_0b, pos_end_0bin_0bex)
-    remove_prettify_flag_range(bufid, pos_start_0b_0b.x, pos_end_0bin_0bex.x + 1)
-    add_prettify_flag_range(bufid, pos_start_0b_0b.x, pos_end_0bin_0bex.x + 1)
-
     local winid = vim.fn.bufwinid(bufid)
     assert(winid > 0)
     local current_row_0b = vim.api.nvim_win_get_cursor(winid)[1] - 1
@@ -1170,9 +1132,24 @@ local function prettify_range(bufid, row_start_0b, row_end_0bex)
     assert(document_root)
 
     for _, node in ipairs(nodes) do
-        local node_row_start_0b, _, _node_row_end_0bin = node:range()
-        local node_row_end_0bex = _node_row_end_0bin + 1
+        local node_row_start_0b, node_col_start_0b, node_row_end_0bin, node_col_end_0bex = node:range()
+        local node_row_end_0bex = node_row_end_0bin + 1
         local config = module.private.config_by_node_name[node:type()]
+
+        if config.clear then
+            config:clear(bufid, node)
+        else
+            local pos_start_0b_0b, pos_end_0bin_0bex =
+                { x = node_row_start_0b, y = node_col_start_0b }, { x = node_row_end_0bin, y = node_col_end_0bex }
+
+            check_min(pos_start_0b_0b, node:start())
+            check_max(pos_end_0bin_0bex, node:end_())
+
+            remove_extmarks(bufid, pos_start_0b_0b, pos_end_0bin_0bex)
+        end
+
+        remove_prettify_flag_range(bufid, node_row_start_0b, node_row_end_0bex)
+        add_prettify_flag_range(bufid, node_row_start_0b, node_row_end_0bex)
 
         if should_skip_prettify(current_mode, current_row_0b, node, config, node_row_start_0b, node_row_end_0bex) then
             goto continue
@@ -1294,8 +1271,6 @@ local function update_cursor(event)
 end
 
 local function handle_init_event(event)
-    -- TODO: make sure only init once
-
     assert(vim.api.nvim_win_is_valid(event.window))
     update_cursor(event)
 
@@ -1338,31 +1313,38 @@ local function handle_init_event(event)
     language_tree:register_cbs({ on_changedtree = on_changedtree_callback })
     mark_all_lines_changed(event.buffer)
 
-    if module.config.public.folds and vim.api.nvim_win_is_valid(event.window) then
-        local wo = vim.wo[event.window]
-        wo.foldmethod = "expr"
-        wo.foldexpr = vim.treesitter.foldexpr and "v:lua.vim.treesitter.foldexpr()" or "nvim_treesitter#foldexpr()"
-        wo.foldtext = utils.is_minimum_version(0, 10, 0) and ""
-            or "v:lua.require'neorg'.modules.get_module('core.concealer').foldtext()"
+    if
+        module.config.public.folds
+        and vim.api.nvim_win_is_valid(event.window)
+        and vim.api.nvim_buf_is_valid(event.buffer)
+    then
+        vim.api.nvim_buf_call(event.buffer, function()
+            -- NOTE(vhyrro): `vim.wo` only supports `wo[winid][0]`,
+            -- hence the `buf_call` here.
+            local wo = vim.wo[event.window][0]
+            wo.foldmethod = "expr"
+            wo.foldexpr = vim.treesitter.foldexpr and "v:lua.vim.treesitter.foldexpr()" or "nvim_treesitter#foldexpr()"
+            wo.foldtext = ""
 
-        local init_open_folds = module.config.public.init_open_folds
-        local function open_folds()
-            vim.cmd("normal! zR")
-        end
-
-        if init_open_folds == "always" then
-            open_folds()
-        elseif init_open_folds == "never" then -- luacheck:ignore 542
-            -- do nothing
-        else
-            if init_open_folds ~= "auto" then
-                log.warn('"init_open_folds" must be "auto", "always", or "never"')
+            local init_open_folds = module.config.public.init_open_folds
+            local function open_folds()
+                vim.cmd("normal! zR")
             end
 
-            if wo.foldlevel == 0 then
+            if init_open_folds == "always" then
                 open_folds()
+            elseif init_open_folds == "never" then -- luacheck:ignore 542
+                -- do nothing
+            else
+                if init_open_folds ~= "auto" then
+                    log.warn('"init_open_folds" must be "auto", "always", or "never"')
+                end
+
+                if wo.foldlevel == 0 then
+                    open_folds()
+                end
             end
-        end
+        end)
     end
 end
 
@@ -1483,18 +1465,17 @@ module.load = function()
             },
         })
     end)
-    if utils.is_minimum_version(0, 7, 0) then
-        vim.api.nvim_create_autocmd("OptionSet", {
-            pattern = "conceallevel",
-            callback = function(_ev) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
-                local bufid = vim.api.nvim_get_current_buf()
-                if vim.bo[bufid].ft ~= "norg" then
-                    return
-                end
-                mark_all_lines_changed(bufid)
-            end,
-        })
-    end
+
+    vim.api.nvim_create_autocmd("OptionSet", {
+        pattern = "conceallevel",
+        callback = function()
+            local bufid = vim.api.nvim_get_current_buf()
+            if vim.bo[bufid].ft ~= "norg" then
+                return
+            end
+            mark_all_lines_changed(bufid)
+        end,
+    })
 end
 
 module.events.subscribed = {

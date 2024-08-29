@@ -15,18 +15,11 @@ but you may map it yourself via the [`core.keybinds`](@core.keybinds) module.
 --]]
 
 local neorg = require("neorg.core")
-local log, modules, utils = neorg.log, neorg.modules, neorg.utils
+local modules, utils = neorg.modules, neorg.utils
 
 local module = modules.create("core.looking-glass")
 
 module.setup = function()
-    if not utils.is_minimum_version(0, 7, 0) then
-        log.error("The `looking-glass` module requires Neovim 0.7+! Please upgrade your Neovim installation.")
-        return {
-            success = false,
-        }
-    end
-
     return {
         success = true,
         requires = {
@@ -37,11 +30,10 @@ module.setup = function()
 end
 
 module.load = function()
-    modules.await("core.keybinds", function(keybinds)
-        keybinds.register_keybind(module.name, "magnify-code-block")
-    end)
+    vim.keymap.set("", "<Plug>(neorg.looking-glass.magnify-code-block)", module.public.magnify_code_block)
 end
 
+---@class core.looking-glass
 module.public = {
     sync_text_segment = function(source, source_window, source_start, source_end, target, target_window)
         -- Create a unique but deterministic namespace name for the code block
@@ -178,11 +170,11 @@ module.public = {
             end,
         })
     end,
-}
 
-module.on_event = function(event)
-    if event.split_type[2] == "core.looking-glass.magnify-code-block" then
-        -- First we must check if the user has their cursor under a code block
+    magnify_code_block = function()
+        local buffer = vim.api.nvim_get_current_buf()
+        local window = vim.api.nvim_get_current_win()
+
         local query = utils.ts_parse_query(
             "norg",
             [[
@@ -192,15 +184,15 @@ module.on_event = function(event)
         ]]
         )
 
-        local document_root = module.required["core.integrations.treesitter"].get_document_root(event.buffer)
+        local document_root = module.required["core.integrations.treesitter"].get_document_root(buffer)
 
         --- Table containing information about the code block that is potentially under the cursor
         local code_block_info
 
         do
-            local cursor_pos = vim.api.nvim_win_get_cursor(event.window)
+            local cursor_pos = vim.api.nvim_win_get_cursor(window)
 
-            for id, node in query:iter_captures(document_root, event.buffer, cursor_pos[1] - 1, cursor_pos[1]) do
+            for id, node in query:iter_captures(document_root, buffer, cursor_pos[1] - 1, cursor_pos[1]) do
                 local capture = query.captures[id]
 
                 if capture == "tag" then
@@ -225,10 +217,11 @@ module.on_event = function(event)
         -- TODO: Make the vsplit location configurable (i.e. whether it spawns on the left or the right)
         local vsplit = module.required["core.ui"].create_vsplit(
             "code-block-" .. tostring(code_block_info.start.row) .. tostring(code_block_info["end"].row), -- This is done to make the name of the vsplit unique
+            true,
             {
                 filetype = (code_block_info.parameters[1] or "none"),
             },
-            true
+            { split = "left" }
         )
 
         if not vsplit then
@@ -257,20 +250,14 @@ module.on_event = function(event)
         local start = last_attribute and last_attribute["end"] or code_block_info.start
 
         module.public.sync_text_segment(
-            event.buffer,
-            event.window,
+            buffer,
+            window,
             start,
             code_block_info["end"],
             vsplit,
             vim.api.nvim_get_current_win()
         )
-    end
-end
-
-module.events.subscribed = {
-    ["core.keybinds"] = {
-        ["core.looking-glass.magnify-code-block"] = true,
-    },
+    end,
 }
 
 return module

@@ -3,12 +3,7 @@
 --- @brief ]]
 
 local neorg = require("neorg.core")
-local config, log, modules = neorg.config, neorg.log, neorg.modules
-
--- HACK(vhyrro): This variable is here to prevent issues with lazy's build.lua script loading.
-
----@type neorg.configuration.user?
-local user_configuration
+local config, log, modules, utils = neorg.config, neorg.log, neorg.modules, neorg.utils
 
 --- @module "neorg.core.config"
 
@@ -17,6 +12,9 @@ local user_configuration
 --- @see config.user_config
 --- @see neorg.configuration.user
 function neorg.setup(cfg)
+    -- Ensure that we are running Neovim 0.10+
+    assert(utils.is_minimum_version(0, 10, 0), "Neorg requires at least Neovim version 0.10 to operate!")
+
     -- If the user supplied no configuration then generate a default one (assume the user wants the defaults)
     cfg = cfg or {
         load = {
@@ -36,36 +34,10 @@ function neorg.setup(cfg)
         }
     end
 
-    if not (pcall(require, "lua-utils")) then
-        vim.notify(
-            "Warning [neorg]: lua-utils not found. If you're just installing the plugin, ignore this message, when in doubt run `:Lazy build neorg`. If you're not on lazy please rerun the build scripts.",
-            vim.log.levels.WARN
-        )
-
-        -- Allow neorg to be reloaded once more.
-        package.loaded.neorg = nil
-
-        user_configuration = cfg
-        return
-    end
-
     config.user_config = vim.tbl_deep_extend("force", config.user_config, cfg)
 
     -- Create a new global instance of the neorg logger.
     log.new(config.user_config.logger or log.get_default_config(), true)
-
-    -- TODO(vhyrro): Remove this after Neovim 0.10, where `norg` files will be
-    -- detected automatically.
-    vim.filetype.add({
-        extension = {
-            norg = "norg",
-        },
-    })
-
-    local ok, lua_utils = pcall(require, "lua-utils")
-    assert(ok, "unable to find lua-utils dependency. Perhaps try restarting Neovim?")
-
-    neorg.lib = lua_utils
 
     -- If the file we have entered has a `.norg` extension:
     if vim.fn.expand("%:e") == "norg" or not config.user_config.lazy_loading then
@@ -85,25 +57,6 @@ function neorg.setup(cfg)
             end,
         })
     end
-end
-
---- Equivalent of `setup()`, but is executed by Lazy.nvim's build.lua script.
---- It attempts to pull the configuration options provided by the user when setup()
---- first ran, and relays those configuration options to the actual Neorg runtime.
-function neorg.setup_after_build()
-    if not user_configuration then
-        return
-    end
-
-    package.loaded["lua-utils"] = nil
-
-    -- HACK(vhyrro): Please do this elsewhere.
-    local ok, lua_utils = pcall(require, "lua-utils")
-    assert(ok, "unable to find lua-utils dependency. Perhaps try restarting Neovim?")
-
-    neorg.lib = lua_utils
-
-    neorg.setup(user_configuration)
 end
 
 --- This function gets called upon entering a .norg file and loads all of the user-defined modules.
@@ -136,15 +89,6 @@ function neorg.org_file_entered(manual, arguments)
 
     -- Go through each defined module and grab its config
     for name, module in pairs(module_list) do
-        -- If the module's data is not empty and we have not defined a config table then it probably means there's junk in there
-        if not vim.tbl_isempty(module) and not module.config then
-            log.warn(
-                "Potential bug detected in",
-                name,
-                "- nonstandard tables found in the module definition. Did you perhaps mean to put these tables inside of the config = {} table?"
-            )
-        end
-
         -- Apply the config
         config.modules[name] = vim.tbl_deep_extend("force", config.modules[name] or {}, module.config or {})
     end

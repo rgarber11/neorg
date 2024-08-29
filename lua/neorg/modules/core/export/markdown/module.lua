@@ -207,6 +207,7 @@ module.config.public = {
     inline_fix = true,
 }
 
+--- @class core.export.markdown
 module.public = {
     export = {
         init_state = function()
