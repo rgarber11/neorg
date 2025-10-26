@@ -23,7 +23,6 @@ local lib, log, modules, utils = neorg.lib, neorg.log, neorg.modules, neorg.util
 local module = modules.create("core.integrations.treesitter")
 
 module.private = {
-    ts_utils = nil,
     link_query = [[
                 (link) @next-segment
                 (anchor_declaration) @next-segment
@@ -58,14 +57,14 @@ module.setup = function()
 end
 
 module.load = function()
-    local success, ts_utils = pcall(require, "nvim-treesitter.ts_utils")
-
-    assert(success, "Unable to load nvim-treesitter.ts_utils :(")
-
     if module.config.public.configure_parsers then
         -- luacheck: push ignore
 
-        local parser_configs = require("nvim-treesitter.parsers").get_parser_configs()
+        -- compat: nvim-treesitter master requires the extra function call, main does not
+        local parser_configs = require("nvim-treesitter.parsers")
+        if parser_configs.get_parser_configs then
+            parser_configs = parser_configs.get_parser_configs()
+        end
 
         parser_configs.norg = {
             install_info = module.config.public.parser_configs.norg,
@@ -109,8 +108,6 @@ module.load = function()
         })
     end
 
-    module.private.ts_utils = ts_utils
-
     vim.keymap.set(
         "",
         "<Plug>(neorg.treesitter.next.heading)",
@@ -147,16 +144,16 @@ module.config.public = {
         norg = {
             url = "https://github.com/nvim-neorg/tree-sitter-norg",
             files = { "src/parser.c", "src/scanner.cc" },
-            branch = "main",
             revision = "6348056b999f06c2c7f43bb0a5aa7cfde5302712",
+            use_makefile = true,
         },
         -- Configuration for the metadata parser (used to parse the contents
         -- of `@document.meta` blocks).
         norg_meta = {
             url = "https://github.com/nvim-neorg/tree-sitter-norg-meta",
             files = { "src/parser.c" },
-            branch = "main",
             revision = "a479d1ca05848d0b51dd25bc9f71a17e0108b240",
+            use_makefile = true,
         },
     },
 }
@@ -164,11 +161,7 @@ module.config.public = {
 ---@class core.integrations.treesitter
 module.public = {
     parser_path = nil,
-    --- Gives back an instance of `nvim-treesitter.ts_utils`
-    ---@return table #`nvim-treesitter.ts_utils`
-    get_ts_utils = function()
-        return module.private.ts_utils
-    end,
+
     --- Jumps to the next match of a query in the current buffer
     ---@param query_string string Query with `@next-segment` captures
     goto_next_query_match = function(query_string)
@@ -194,7 +187,7 @@ module.public = {
 
                 -- Find and go to the first matching node that starts after the current cursor position.
                 if (start_line == line_number and start_col > col_number) or start_line > line_number then
-                    module.private.ts_utils.goto_node(node) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                    module.public.goto_node(node)
                     return
                 end
             end
@@ -236,7 +229,7 @@ module.public = {
             ::continue::
         end
         if final_node then
-            module.private.ts_utils.goto_node(final_node) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+            module.public.goto_node(final_node)
         end
     end,
     ---  Gets all nodes of a given type from the AST
@@ -392,15 +385,15 @@ module.public = {
         local range1 = module.public.node_to_lsp_range(node1)
         local range2 = module.public.node_to_lsp_range(node2)
 
-        local text1 = module.public.get_node_text(node1, bufnr)
-        local text2 = module.public.get_node_text(node2, bufnr)
+        local _text1 = module.public.get_node_text(node1, bufnr)
+        local _text2 = module.public.get_node_text(node2, bufnr)
 
-        if not text1 or not text2 then
+        if not _text1 or not _text2 then
             return
         end
 
-        text1 = vim.split(text1, "\n")
-        text2 = vim.split(text2, "\n")
+        local text1 = vim.split(_text1, "\n")
+        local text2 = vim.split(_text2, "\n")
 
         ---remove trailing blank lines from the text, and update the corresponding range appropriately
         ---@param text string[]
@@ -468,6 +461,7 @@ module.public = {
     end,
 
     --- Returns the first node of given type if present
+    ---@deprecated use get_first_node_recursive instead
     ---@param type string #The type of node to search for
     ---@param buf number #The buffer to search in
     ---@param parent userdata #The node to start searching in
@@ -489,14 +483,16 @@ module.public = {
         end
 
         vim.treesitter.get_parser(buf, "norg"):for_each_tree(function(tree)
+            -- FIXME: this return value doesn't do what the original author thinks it does
             -- Iterate over all top-level children and attempt to find a match
             return iterate(tree:root()) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
         end)
     end,
     --- Recursively attempts to locate a node of a given type
     ---@param type string #The type of node to look for
-    ---@param opts table #A table of two options: `buf` and `ft`, for the buffer and format respectively
-    ---@return any ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+    ---@param opts {buf: number?, ft: string?, parent: TSNode?} # Buffer, filetype (for TS parsing),
+    ---parent, defaults to root node
+    ---@return TSNode?
     get_first_node_recursive = function(type, opts)
         opts = opts or {}
         local result
@@ -519,11 +515,15 @@ module.public = {
                 root = tree:root()
             end
 
+            if not root then
+                return
+            end
+
             --- Recursively searches for a node of a given type
             ---@param node TSNode #The starting point for the search
             local function descend(node)
                 -- Iterate over all children of the node and try to match their type
-                for child, _ in node:iter_children() do ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                for child, _ in node:iter_children() do
                     if child:type() == type then
                         return child
                     else
@@ -543,6 +543,7 @@ module.public = {
 
         return result
     end,
+
     --- Given a node this function will break down the AST elements and return the corresponding text for certain nodes
     --- @param tag_node TSNode - a node of type tag/carryover_tag
     --- @param throw boolean - when true, throw an error instead of logging and returning on failure
@@ -576,12 +577,12 @@ module.public = {
                 end
             elseif child:type() == "tag_name" then
                 -- If we're dealing with the tag name then append the text of the tag_name node to this table
-                table.insert(resulting_name, vim.split(module.public.get_node_text(child), "\n")[1]) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                table.insert(resulting_name, vim.split(module.public.get_node_text(child), "\n")[1])
             elseif child:type() == "tag_parameters" then
-                table.insert(params, vim.split(module.public.get_node_text(child), "\n")[1]) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                table.insert(params, vim.split(module.public.get_node_text(child), "\n")[1])
             elseif child:type() == "ranged_verbatim_tag_content" then
                 -- If we're dealing with tag content then retrieve that content
-                content = vim.split(module.public.get_node_text(child), "\n") ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                content = vim.split(module.public.get_node_text(child), "\n")
                 _, content_start_column = child:range()
             end
         end
@@ -618,8 +619,8 @@ module.public = {
             ["end"] = { row = end_row, column = end_column },
         }
     end,
-    --- Gets the range of a given node
-    ---@param node userdata #The node to get the range of
+    --- Gets the range of the given node
+    ---@param node TSNode
     ---@return { row_start: number, column_start: number, row_end: number, column_end: number } range
     get_node_range = function(node)
         if not node then
@@ -636,7 +637,7 @@ module.public = {
             local _, _, ere, ece = node[#node]:range()
             return brs, bcs, ere, ece
         end, function()
-            local a, b, c, d = node:range() ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+            local a, b, c, d = node:range()
             return a, b, c, d
         end)
 
@@ -658,6 +659,9 @@ module.public = {
         if type(src) == "string" then
             parser = vim.treesitter.get_string_parser(src, filetype)
         else
+            if src ~= 0 and src ~= nil then
+                vim.fn.bufload(src)
+            end
             parser = vim.treesitter.get_parser(src or 0, filetype)
         end
 
@@ -669,29 +673,31 @@ module.public = {
 
         return tree:root()
     end,
+
     --- Attempts to find a parent of a node recursively
-    ---@param node userdata #The node to start at
+    ---@param node TSNode #The node to start at
     ---@param types table|string #If `types` is a table, this function will attempt to match any of the types present in the table.
     -- If the type is a string, the function will attempt to pattern match the `types` value with the node type.
     find_parent = function(node, types)
+        ---@type TSNode?
         local _node = node
 
         while _node do
             if type(types) == "string" then
-                if _node:type():match(types) then ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+                if _node:type():match(types) then
                     return _node
                 end
-            elseif vim.tbl_contains(types, _node:type()) then ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+            elseif vim.tbl_contains(types, _node:type()) then
                 return _node
             end
 
-            _node = _node:parent() ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+            _node = _node:parent()
         end
     end,
+
     --- Retrieves the first node at a specific line
     ---@param buf number #The buffer to search in (0 for current)
-    ---@param line number #The line number (0-indexed) to get the node from
-    -- the same line as `line`.
+    ---@param line number #The line number (0-indexed) to get the node from the same line as `line`.
     ---@param stop_type string|table? #Don't recurse to the provided type(s)
     ---@return TSNode|nil #The first node on `line`
     get_first_node_on_line = function(buf, line, stop_type)
@@ -708,7 +714,7 @@ module.public = {
         local first_char = (vim.api.nvim_buf_get_lines(buf, line, line + 1, true)[1] or ""):match("^(%s+)[^%s]")
         first_char = first_char and first_char:len() or 0
 
-        local descendant = document_root:descendant_for_range(line, first_char, line, first_char + 1) ---@diagnostic disable-line -- TODO: type error workaround <pysan3>
+        local descendant = document_root:descendant_for_range(line, first_char, line, first_char + 1)
 
         if not descendant then
             return
@@ -723,6 +729,10 @@ module.public = {
 
             if parent and stop_type and vim.tbl_contains(stop_type, parent:type()) then
                 break
+            end
+
+            if not parent then
+                return
             end
 
             descendant = parent
@@ -870,6 +880,7 @@ module.public = {
 
         return result
     end,
+
     --- Parses a query and automatically executes it for Norg
     ---@param query_string string #The query string
     ---@param callback function #The callback to execute with all values returned by
@@ -927,57 +938,106 @@ module.public = {
     end,
 }
 
--- this fixes the problem of installing neorg ts parsers on macOS without resorting to using gcc
-local function install_norg_ts()
-    local install = require("nvim-treesitter.install")
+--[[
+-- attribution notice:
+-- The below public functions are originally licensed under Apache v2 taken from:
+-- https://github.com/nvim-treesitter/nvim-treesitter/blob/master/lua/nvim-treesitter/ts_utils.lua
+--]]
 
-    if vim.fn.has("macunix") == 1 then
-        -- https://github.com/nvim-neorg/tree-sitter-norg/issues/7
-        -- (we have to force clang to c++11 mode on macOS manually)
-
-        local shell = require("nvim-treesitter.shell_command_selectors")
-
-        -- save the original functions
-        local select_executable = shell.select_executable
-        local compilers = install.compilers
-
-        -- temporarily patch treesitter install logic
-        local cc = "clang++ -std=c++11"
-        ---@diagnostic disable-next-line: duplicate-set-field
-        shell.select_executable = function(executables)
-            return vim.tbl_filter(function(c) ---@param c string
-                return c ~= vim.NIL and (vim.fn.executable(c) == 1 or c == cc)
-            end, executables)[1]
-        end
-        install.compilers = { cc }
-
-        -- install norg parsers
-        local ok, err = pcall(function()
-            install.commands.TSInstallSync["run!"]("norg")
-        end)
-
-        -- no matter what, restore the defaults back
-        shell.select_executable = select_executable
-        install.compilers = compilers
-
-        -- if an error occurred during install, propagate it up
-        if not ok then
-            error(err)
-        end
-    else
-        install.commands.TSInstallSync["run!"]("norg")
+-- Get previous node with same parent
+---@param node                   TSNode
+---@param allow_switch_parents?  boolean allow switching parents if first node
+---@param allow_previous_parent? boolean allow previous parent if first node and previous parent without children
+module.public.get_previous_node = function(node, allow_switch_parents, allow_previous_parent)
+    local destination_node ---@type TSNode?
+    local parent = node:parent()
+    if not parent then
+        return
     end
+
+    local found_pos = 0
+    for i = 0, parent:named_child_count() - 1, 1 do
+        if parent:named_child(i) == node then
+            found_pos = i
+            break
+        end
+    end
+    if 0 < found_pos then
+        destination_node = parent:named_child(found_pos - 1)
+    elseif allow_switch_parents then
+        local previous_node = module.public.get_previous_node(parent)
+        if previous_node and previous_node:named_child_count() > 0 then
+            destination_node = previous_node:named_child(previous_node:named_child_count() - 1)
+        elseif previous_node and allow_previous_parent then
+            destination_node = previous_node
+        end
+    end
+    return destination_node
+end
+
+module.public.goto_node = function(node, goto_end, avoid_set_jump)
+    if not node then
+        return
+    end
+    if not avoid_set_jump then
+        vim.cmd("normal! m'")
+    end
+    local range = module.public.get_node_range(node)
+
+    ---@type table<number>
+    local position
+    if not goto_end then
+        position = { range.row_start, range.column_start }
+    else
+        position = { range.row_end, range.column_end }
+    end
+
+    -- Enter visual mode if we are in operator pending mode
+    -- If we don't do this, it will miss the last character.
+    local mode = vim.api.nvim_get_mode()
+    if mode.mode == "no" then
+        vim.cmd("normal! v")
+    end
+
+    vim.api.nvim_win_set_cursor(0, { position[1] + 1, position[2] })
+end
+
+-- Get next node with same parent
+---@param node                  TSNode
+---@param allow_switch_parents? boolean allow switching parents if last node
+---@param allow_next_parent?    boolean allow next parent if last node and next parent without children
+module.public.get_next_node = function(node, allow_switch_parents, allow_next_parent)
+    local destination_node ---@type TSNode?
+    local parent = node:parent()
+
+    if not parent then
+        return
+    end
+    local found_pos = 0
+    for i = 0, parent:named_child_count() - 1, 1 do
+        if parent:named_child(i) == node then
+            found_pos = i
+            break
+        end
+    end
+    if parent:named_child_count() > found_pos + 1 then
+        destination_node = parent:named_child(found_pos + 1)
+    elseif allow_switch_parents then
+        local next_node = module.public.get_next_node(parent)
+        if next_node and next_node:named_child_count() > 0 then
+            destination_node = next_node:named_child(0)
+        elseif next_node and allow_next_parent then
+            destination_node = next_node
+        end
+    end
+
+    return destination_node
 end
 
 module.on_event = function(event)
     if event.split_type[2] == "sync-parsers" then
-        local ok, err = pcall(install_norg_ts)
-
-        if not ok then
-            utils.notify(string.format([[Unable to auto-install Norg parser: %s]], err), vim.log.levels.WARN)
-        end
-
         local install = require("nvim-treesitter.install")
+        install.commands.TSInstallSync["run!"]("norg")
         install.commands.TSInstallSync["run!"]("norg_meta")
     end
 end
